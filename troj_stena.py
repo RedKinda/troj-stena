@@ -2,6 +2,7 @@ import discord
 import time
 import asyncio
 import requests
+import re
 import pickle
 import lxml
 import lxml.etree
@@ -12,6 +13,7 @@ commands = asyncio.Queue()
 ready = False
 client = discord.Client()
 @client.event
+
 async def on_ready():
 	global warnings
 	global weird_messages
@@ -28,19 +30,21 @@ async def on_ready():
 	trojsten = client.guilds[0]
 	categories = []
 	botrole = trojsten.get_role(598502023079657483)
-	filehandler = open('information.dat', 'rw+')
 	seminars = []
 	warnings = {}
 	weird_messages = {}
 	try:			#loading seminars
-		seminars = pickle.load(filehandler)
+		reader = open('information.dat', 'rb')
+		seminars = pickle.load(reader)
 	except EOFError: #if there is no file, create them
-		seminars = [Seminar("kms", client.get_channel(598476702527651841), "https://kms.sk", 10),
-					Seminar("ksp", client.get_channel(598479504595484683), "https://ksp.sk", 8),
-					Seminar("fks", client.get_channel(598479519296389122), "https://fks.sk", 7),
-					Seminar("ufo", client.get_channel(598479666205949952), "https://ufo.fks.sk", 5),
-					Seminar("prask", client.get_channel(598479637093416973), "https://prask.ksp.sk", 5)]
+		filehandler = open('information.dat', 'wb+')
+		seminars = [Seminar("kms", client.get_channel(598476702527651841), "https://kms.sk"),
+					Seminar("ksp", client.get_channel(598479504595484683), "https://ksp.sk"),
+					Seminar("fks", client.get_channel(598479519296389122), "https://fks.sk"),
+					Seminar("ufo", client.get_channel(598479666205949952), "https://ufo.fks.sk"),
+					Seminar("prask", client.get_channel(598479637093416973), "https://prask.ksp.sk")]
 		pickle.dump(seminars, filehandler)
+	filehandler = open('information.dat', 'wb')
 	for s in seminars:
 		await s.voting("release")
 	await commandloop()
@@ -179,6 +183,18 @@ class problem:
 		self.link = link
 		self.points = points
 
+
+class person:
+	def __init__(self,stat,name,year,school,level,points_bf,points,points_sum):
+		self.stat = stat
+		self.name = name
+		self.year = year
+		self.school = school
+		self.level = level
+		self.points_bf = points_bf
+		self.points = points
+		self.points_sum = points_sum
+
 class GatheringException(Exception):
 	def __init__(self, seminar, message):
 		self.seminar = seminar
@@ -190,9 +206,17 @@ class Seminar:
 	def __init__(self, name, category_channel,url):
 		self.name = name
 		self.cat_channel = category_channel
-
 		self.url = url 
+
+		self.active = False
+		self.year = 0
+		self.round = 0
+		self.part = 0
+		self.problems = []
+		self.p_length = len(self.problems)
+		self.result_table = []
 		self.get_info()
+		
 
 	async def voting(self, type):
 		self.get_info()
@@ -218,7 +242,7 @@ class Seminar:
 			await vote_channel.send("You can find them on website: " + self.url + "/ulohy")
 
 
-			for n in range(len(self.problems)):
+			for n in range(self.p_length):
 				msg = await vote_channel.send(str(n+1) + ". " + self.problems[n].name)
 			
 				#reacty = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "keycap_ten"]
@@ -241,7 +265,7 @@ class Seminar:
 			sourceCodeP = responseP.content
 			sourceCodeR = responseR.content
 		except:
-			raise GatheringException(self,name,"Conectivity error occured")
+			raise GatheringException(self.name,"Conectivity error occured")
 		try:
 			treeP = lxml.etree.HTML(sourceCodeP)
 			treeR = lxml.etree.HTML(sourceCodeR)
@@ -254,39 +278,45 @@ class Seminar:
 			raise GatheringException(self.name,"Web not compatible")
 		try:
 			output = []
-			yeeters = []
-			for per in result_list.findall('.//tr')[1:]:
-				yeeter = per.findall('.//td')
-				cLass = yeeter[0].find('.//span').attrib['class']
-				if 'glyphicon-asterisk' in cLass:
-					state = 'new'
-				elif 'glyphicon-chevron-down' in cLass:
-					state = 'dropped'
-				elif 'glyphicon-chevron-up' in cLass:
-					state = 'advanced'
-				elif 'glyphicon-pushpin' in cLass:
-					state = 'pinned'
-				else:
-					state = 'none'
-				name = yeeter[1].text.strip()
-				yeer = yeeter[2].text.strip()
-				school = yeeter[3][0].text.strip()
-				level = yeeter[4][0].text.strip()
-				points_before = yeeter[5][0].text.strip()
-				poyeents = []
-				for i in range(6,5+p_length):
-					poyeents.append(yeeter[i][0].text if yeeter[i][0].text == None else yeeter[i][0].text.strip())
-				points_sum = yeeter[6+p_length][0].text.strip()
-				yeeters.append(person(state,name,yeer,school,level,points_before,poyeents,points_sum))
-				
+			def get_results():
+				rows = result_list.findall('.//tr')
+				row_type = rows[0].findall('.//th')				
+				for per in rows[1:]:
+					state,name,year,school,level,points_before,pointers,points_sum = None, None, None, None, None, None, None, None
+					clovek = per.findall('.//td')
+					for i in range(len(clovek)):
+						pointers = []
+						if row_type[i].text == None:
+							if 'R' in row_type[i][0].text:
+								year = clovek[i].text.strip()
+							elif 'Level' or 'K' in row_type[i][0].text:
+								level = clovek[i][0].text.strip()
+							elif 'P' in row_type[i][0].text:
+								points_before = clovek[i][0].text.strip()
+							elif '∑' in row_type[i][0].text:
+								points_sum = clovek[i][0].text.strip()
+							elif re.match(r'[1-10]',row_type[i][0].text):
+								pointers.append(clovek[i][0].text if clovek[i][0].text == None else clovek[i][0].text.strip())
+						elif '#' in row_type[i].text:
+							cLass = clovek[i].find('.//span').attrib['class']
+							if 'glyphicon-asterisk' in cLass:
+								state = 'new'
+							elif 'glyphicon-chevron-down' in cLass:
+								state = 'dropped'
+							elif 'glyphicon-chevron-up' in cLass:
+								state = 'advanced'
+							elif 'glyphicon-pushpin' in cLass:
+								state = 'pinned'
+							else:
+								state = 'none'
+						elif 'Meno' in row_type[i].text:
+							name = clovek[i].text.strip()
+						elif 'kola' in row_type[i].text:
+							school = clovek[i][0].text.strip()
+				self.result_table.append(person(state,name,year,school,level,points_before,pointers,points_sum))
 			if('task-list' in task_list.attrib['class']):
 				self.active = True
-				round_info = try:
-					pass
-				except expression as identifier:
-					pass
-				else:
-					pass.find('.//small').text.replace('\n','').replace(' ','').split(',')
+				round_info = treeP.find('.//small').text.replace('\n','').replace(' ','').split(',')
 				# check for changes
 				round = round_info[0].split('.')[0]
 				part = round_info[1].split('.')[0]
@@ -297,57 +327,19 @@ class Seminar:
 					for pointer in node[2].findall('span'):
 						pointers.append(pointer.text.replace('\xa0','').split(':')[1])
 					self.problems.append(problem(node[1][0].text,self.url+node[1][0].attrib['href'],pointers))
+				self.p_length = len(self.problems)
+				get_results()
 				if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0): output.append('zadania')
 				self.round = round
 				self.part = part
 				self.year = year
-				self.remaining = tree.find(".//div[@class='progress-bar progress-bar-info']").text
-
-				except expression as identifier:
-					pass
-				else:
-					pass.find('.//small').text.replace('\n','').replace(' ','').split(',')
-				# check for changes
-				round = round_info[0].split('.')[0]
-				part = round_info[1].split('.')[0]
-				year = round_info[2].split('.')[0]
-				self.problems = []
-				for node in task_list.findall('tr'):
-					pointers = []
-					for pointer in node[2].findall('span'):
-						pointers.append(pointer.text.replace('\xa0','').split(':')[1])
-					self.problems.append(problem(node[1][0].text,self.url+node[1][0].attrib['href'],pointers))
-				if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0): output.append('zadania')
-				self.round = round
-				self.part = part
-				self.year = year
-				self.remaining = tree.find(".//div[@class='progress-bar progress-bar-info']").text
-
-				except expression as identifier:
-					pass
-				else:
-					pass.find('.//small').text.replace('\n','').replace(' ','').split(',')
-				# check for changes
-				round = round_info[0].split('.')[0]
-				part = round_info[1].split('.')[0]
-				year = round_info[2].split('.')[0]
-				self.problems = []
-				for node in task_list.findall('tr'):
-					pointers = []
-					for pointer in node[2].findall('span'):
-						pointers.append(pointer.text.replace('\xa0','').split(':')[1])
-					self.problems.append(problem(node[1][0].text,self.url+node[1][0].attrib['href'],pointers))
-				if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0): output.append('zadania')
-				self.round = round
-				self.part = part
-				self.year = year
-				self.remaining = tree.find(".//div[@class='progress-bar progress-bar-info']").text
-
+				self.remaining = treeP.find(".//div[@class='progress-bar progress-bar-info']").text
 				return output
 			else:				
 				if (self.active != False): output.append('End of round')
 				self.active = False
 				self.remaining = "Round not active"
+				get_results()
 				return output
 		except:
 			raise GatheringException(self.name,"Gathering error occured")
