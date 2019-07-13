@@ -43,6 +43,8 @@ async def on_ready():
 					Seminar("fks", client.get_channel(598479519296389122), "https://fks.sk"),
 					Seminar("ufo", client.get_channel(598479666205949952), "https://ufo.fks.sk"),
 					Seminar("prask", client.get_channel(598479637093416973), "https://prask.ksp.sk")]
+		#Debug web gathering --> print first contestant in result table for seminar x
+		#print(seminars[1].result_table[0].print_contents())
 		pickle.dump(seminars, filehandler)
 	filehandler = open('information.dat', 'wb')
 	for s in seminars:
@@ -182,6 +184,8 @@ class problem:
 		self.name = name
 		self.link = link
 		self.points = points
+	def print_contents(self):
+		print([self.name,self.link,self.points])
 
 
 class person:
@@ -194,6 +198,8 @@ class person:
 		self.points_bf = points_bf
 		self.points = points
 		self.points_sum = points_sum
+	def print_contents(self):
+		print([self.stat,self.name,self.year,self.school,self.level,self.points_bf,self.points,self.points_sum])
 
 class GatheringException(Exception):
 	def __init__(self, seminar, message):
@@ -213,10 +219,9 @@ class Seminar:
 		self.round = 0
 		self.part = 0
 		self.problems = []
-		self.p_length = len(self.problems)
 		self.result_table = []
 		self.get_info()
-		
+		self.p_length = len(self.problems)
 
 	async def voting(self, type):
 		self.get_info()
@@ -284,20 +289,12 @@ class Seminar:
 				for per in rows[1:]:
 					state,name,year,school,level,points_before,pointers,points_sum = None, None, None, None, None, None, None, None
 					clovek = per.findall('.//td')
+					pointers = []
 					for i in range(len(clovek)):
-						pointers = []
-						if row_type[i].text == None:
-							if 'R' in row_type[i][0].text:
-								year = clovek[i].text.strip()
-							elif 'Level' or 'K' in row_type[i][0].text:
-								level = clovek[i][0].text.strip()
-							elif 'P' in row_type[i][0].text:
-								points_before = clovek[i][0].text.strip()
-							elif '∑' in row_type[i][0].text:
-								points_sum = clovek[i][0].text.strip()
-							elif re.match(r'[1-10]',row_type[i][0].text):
-								pointers.append(clovek[i][0].text if clovek[i][0].text == None else clovek[i][0].text.strip())
-						elif '#' in row_type[i].text:
+						rt = str(row_type[i].text).strip()
+						if rt == None or rt == '':
+							rt = str(row_type[i][0].text).strip()
+						if '#' in rt:
 							cLass = clovek[i].find('.//span').attrib['class']
 							if 'glyphicon-asterisk' in cLass:
 								state = 'new'
@@ -309,11 +306,21 @@ class Seminar:
 								state = 'pinned'
 							else:
 								state = 'none'
-						elif 'Meno' in row_type[i].text:
+						elif 'Meno' in rt:
 							name = clovek[i].text.strip()
-						elif 'kola' in row_type[i].text:
+						elif 'kola' in rt:
 							school = clovek[i][0].text.strip()
-				self.result_table.append(person(state,name,year,school,level,points_before,pointers,points_sum))
+						elif 'R' in rt:
+							year = clovek[i].text.strip()
+						elif 'Level' in rt or 'K' in rt:
+							level = clovek[i][0].text.strip()
+						elif 'P' in rt:
+							points_before = clovek[i][0].text.strip()
+						elif '∑' in rt:
+							points_sum = clovek[i][0].text.strip()
+						elif re.match(r'[1-9]',rt):
+							pointers.append(None if clovek[i][0].text == None else clovek[i][0].text.strip())
+					self.result_table.append(person(state,name,year,school,level,points_before,pointers,points_sum))
 			if('task-list' in task_list.attrib['class']):
 				self.active = True
 				round_info = treeP.find('.//small').text.replace('\n','').replace(' ','').split(',')
