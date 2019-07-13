@@ -38,14 +38,16 @@ async def on_ready():
 		seminars = pickle.load(reader)
 	except EOFError: #if there is no file, create them
 		filehandler = open('information.dat', 'wb+')
-		seminars = [Seminar("kms", client.get_channel(598476702527651841), "https://kms.sk"),
-					Seminar("ksp", client.get_channel(598479504595484683), "https://ksp.sk"),
-					Seminar("fks", client.get_channel(598479519296389122), "https://fks.sk"),
-					Seminar("ufo", client.get_channel(598479666205949952), "https://ufo.fks.sk"),
-					Seminar("prask", client.get_channel(598479637093416973), "https://prask.ksp.sk")]
+		seminars = [Seminar("kms", 598476702527651841, "https://kms.sk"),
+					Seminar("ksp", 598479504595484683, "https://ksp.sk"),
+					Seminar("fks", 598479519296389122, "https://fks.sk"),
+					Seminar("ufo", 598479666205949952, "https://ufo.fks.sk"),
+					Seminar("prask", 598479637093416973, "https://prask.ksp.sk")]
 		#Debug web gathering --> print first contestant in result table for seminar x
 		#print(seminars[1].result_table[0].print_contents())
 		pickle.dump(seminars, filehandler)
+	for sem in seminars:
+		sem.cat_channel = client.get_channel(sem.cat_channel)
 	filehandler = open('information.dat', 'wb')
 	for s in seminars:
 		await s.voting("release")
