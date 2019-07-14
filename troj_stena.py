@@ -49,14 +49,15 @@ async def on_ready():
 	for sem in seminars:
 		sem.cat_channel = client.get_channel(sem.cat_channel)
 	filehandler = open('information.dat', 'wb')
-	for s in seminars:
-		await s.voting("release")
+	#for s in seminars:
+	#	await s.voting("release")
 	await commandloop()
 
 	
 async def commandloop():
 	while True:
 		inp = await commands.get()
+		print(inp[0] + inp[1].content)
 		coms = {"new":		new_interesting,
 				"purge":	admin_purge,
 				}
@@ -65,14 +66,13 @@ async def commandloop():
 		await coms[inp[0]](inp[1])
 
 
-async def new_interesting(msg):
+async def new_interesting(message):
 	if message.channel.name == "zaujimave-ulohy" or message.channel.name == "ad min":
 		if message.channel.name == "ad min":
 			message.channel = client.get_channel(598522778743734342)
 		await message.channel.send("Hey guys, " + message.author.name + " just posted a problem! Author can mark this problem " 
 			+ "<:solved:598782166121316363> once it is solved.")
 		await message.pin()
-
 async def admin_purge(msg):
 	#purges server
 	if msg.author == "MvKal":
@@ -81,7 +81,6 @@ async def admin_purge(msg):
 				print("Inquisiting " + ch.name)
 				await ch.purge(limit = None)
 				
-
 async def permaloop():
 	global last_update
 	intervals = 900
@@ -97,9 +96,8 @@ async def permaloop():
 						s.voting("ideal solutions")
 					elif change == "new results":
 						s.update_on_results()
-
-
-
+					elif change == "end of turn":
+						s.end_message()
 
 @client.event
 async def on_message(message):
@@ -111,7 +109,13 @@ async def on_message(message):
 
 	if message.author.dm_channel == message.channel:
 		if message.author.name=="MvKal":
-			await commands.put(message)
+			if " " in message.content:
+				words = message.content[1:].split(" ")
+				message.content = " ".join(words[1:])
+				message.channel.name = "ad min"
+				await commands.put((words[0], message))
+			else:
+				await commands.put((message.content[1:], None))
 		else:
 			await message.channel.send("Sorry, I have no functionality relating DM channels yet.. Enjoy my presence on Trojsten server instead :)")
 		return
@@ -130,9 +134,9 @@ async def on_message(message):
 	if message.author.name=="Girl Jesus":
 		await message.add_reaction(client.get_emoji(598820789168373778)) #misko emoji
 
-	if message.startswith("$"):
+	if message.content.startswith("$"):
 		if " " in message.content:
-			words = message.content.split(" ")
+			words = message.content[1:].split(" ")
 			message.content = " ".join(words[1:])
 			await commands.put((words[0], message))
 		else:
@@ -157,18 +161,28 @@ async def on_reaction_add(react, user):
 	if react.message.channel.name == "zaujimave-ulohy"  and react.emoji == client.get_emoji(598782166121316363) and await react_iter(react.message.author, react.users) and react.message.pinned and react.message.content.startswith("$new"):
 		await react.message.channel.send("WOW, somebody has solved " + react.message.author.name + "'s problem: " + react.message.content[5:] + "! Congrats!")
 		await react.message.unpin()
-	elif react.emoji == client.get_emoji(599242099207962635) and user in trojsten.get_role(598517418968743957).members:
+	elif react.emoji == client.get_emoji(599242099207962635):
+		if react.message.channel == trojsten.get_channel(599249382038044703):
+			react.message = await react.message.author.fetch_message(weird_messages[react.message.id])
+			await react.message.author.dm_channel.send(react.message.author + ". Moderators decided, that your message (details below) violated rules, and is now deleted. Please respect server rules. You get an official warning, and on 3-rd warning, you will be banned.")
+			await react.message.author.dm_channel.send("Message details:\nCreated at: " + react.message.created_at + "UTC" +
+														"\nSent to: " + react.message.channel +
+														"\nContents: " + react.message.content)
+		if user in trojsten.get_role(598517418968743957).members and react.messae.channel != trojsten.get_channel(599249382038044703):
+			await react.message.channel.send(react.message.author + "!!! Your message was deleted because of serious rules violation. You now get an official warning. You get server ban on 3-rd warning.")
 		await react.message.delete()
-		await react.message.channel.send(react.message.author + "!!! Your message was deleted because of violating rules about solving. You now get an official warning. You get server ban on 3-rd warning.")
 		if react.message.author.name not in warnings:
 			warnings.update({react.message.author.name: [warnings[react.message.author.name], "CHEAT alert emoji"]})
 		else:
 			warnings[react.message.author.name][0] += 1
 			warnings[react.message.author.name].append("CHEAT alert emoji")
-	elif react.emoji == client.get_emoji(599248755186728966) and user in trojsten.get_role(598517418968743957).members:
-		chan = await trojsten.get_channel(599249382038044703)
-		newmsg = await chan.send("Questionable message in " + react.message.channel.category + ": " + react.message.channel)
-		weird_messages.update({newmsg: react.message})
+
+		
+	elif react.emoji == client.get_emoji(599248755186728966):
+		chan = trojsten.get_channel(599249382038044703)
+		newmsg = await chan.send("Questionable message in " + react.message.channel.name + ": " + react.message.content)
+		weird_messages.update({newmsg.id: react.message.id})
+	
 	
 
 '''
@@ -264,6 +278,11 @@ class Seminar:
 
 	async def update_on_results(self):
 		await self.cat_channel.text_channels[0].send("Hey guys, some random veducko added some points! Go and check it out on " + self.url + "/vysledky/")
+	
+	async def end_message(self):
+		await self.cat_channel.text_channels[0].send("The round of " + self.name + " has officialy ended. Congratulations to every sucessful participant!")
+	
+	
 
 	def get_info(self):
 		try:
@@ -287,7 +306,8 @@ class Seminar:
 			output = []
 			def get_results():
 				rows = result_list.findall('.//tr')
-				row_type = rows[0].findall('.//th')				
+				row_type = rows[0].findall('.//th')		
+				results = []		
 				for per in rows[1:]:
 					state,name,year,school,level,points_before,pointers,points_sum = None, None, None, None, None, None, None, None
 					clovek = per.findall('.//td')
@@ -322,7 +342,9 @@ class Seminar:
 							points_sum = clovek[i][0].text.strip()
 						elif re.match(r'[1-9]',rt):
 							pointers.append(None if clovek[i][0].text == None else clovek[i][0].text.strip())
-					self.result_table.append(person(state,name,year,school,level,points_before,pointers,points_sum))
+					results.append(person(state,name,year,school,level,points_before,pointers,points_sum))
+				if (self.result_table != results): output.append("new results")
+				self.results_table = results	
 			if('task-list' in task_list.attrib['class']):
 				self.active = True
 				round_info = treeP.find('.//small').text.replace('\n','').replace(' ','').split(',')
@@ -338,14 +360,14 @@ class Seminar:
 					self.problems.append(problem(node[1][0].text,self.url+node[1][0].attrib['href'],pointers))
 				self.p_length = len(self.problems)
 				get_results()
-				if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0): output.append('zadania')
+				if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0): output.append('new problems')
 				self.round = round
 				self.part = part
 				self.year = year
 				self.remaining = treeP.find(".//div[@class='progress-bar progress-bar-info']").text
 				return output
 			else:				
-				if (self.active != False): output.append('End of round')
+				if (self.active != False): output.append('end of round')
 				self.active = False
 				self.remaining = "Round not active"
 				get_results()
