@@ -6,7 +6,8 @@ import re
 import pickle
 import lxml
 import lxml.etree
-from aioconsole import ainput
+import datetime
+#from aioconsole import ainput
 
 commands = asyncio.Queue()
 
@@ -124,7 +125,7 @@ async def on_message(message):
 	slowmode = 10
 	if message.author in trojsten.get_role(598815157975515147).members: #timeOut role
 		if message.author.name not in timeouts:
-			timeouts.update({message.author.name: time.time()})
+			timeouts[message.author.name] = time.time()
 		elif timeouts[message.author.name] + slowmode > time.time():
 			await message.delete()
 			return
@@ -144,6 +145,24 @@ async def on_message(message):
 
 	
 
+async def add_warning(user, reason):
+	warnings_to_ban = 3
+	if user.name not in warnings:
+		warnings[user.name] = [1, reason]
+	else:
+		warnings[user.name][0] += 1
+		warnings[user.name].append(reason)
+	if warnings[user.name][0] >= warnings_to_ban:
+		try:
+			await trojsten.ban(user, reason = ", ".join(warnings[user.name][1:]) + "banned by bot." , delete_message_days = 0)
+			await user.dm_channel.send("Number of warnings have reached " + warnings_to_ban + ". You are now banned from Trojsten server.")
+		except Exception as e:
+			await user.dm_channel.send("You have reached maximum number of warnings, but I am unable to ban you for some reason. High lord MvKal is notified about this and will deal with you accordingly.")
+			await trojsten.owner.dm_channel.send("I am unable to ban " + user.name + ", but he has reached maximum warnings. Handle this situation accordingly.\nException in console")
+			print (e)
+	else:
+		await user.dm_channel.send("You now get an official warning. You now have " + str(warnings[user.name][0]) + " warnings. Once this number reaches " + str(warnings_to_ban) + ", you will get a server ban. Contact moderators for further information.\n\n\n-Troj-stena")
+
 
 
 async def react_iter(look, iterator):
@@ -161,27 +180,28 @@ async def on_reaction_add(react, user):
 	if react.message.channel.name == "zaujimave-ulohy"  and react.emoji == client.get_emoji(598782166121316363) and await react_iter(react.message.author, react.users) and react.message.pinned and react.message.content.startswith("$new"):
 		await react.message.channel.send("WOW, somebody has solved " + react.message.author.name + "'s problem: " + react.message.content[5:] + "! Congrats!")
 		await react.message.unpin()
-	elif react.emoji == client.get_emoji(599242099207962635):
-		if react.message.channel == trojsten.get_channel(599249382038044703):
-			react.message = await react.message.author.fetch_message(weird_messages[react.message.id])
-			await react.message.author.dm_channel.send(react.message.author + ". Moderators decided, that your message (details below) violated rules, and is now deleted. Please respect server rules. You get an official warning, and on 3-rd warning, you will be banned.")
-			await react.message.author.dm_channel.send("Message details:\nCreated at: " + react.message.created_at + "UTC" +
-														"\nSent to: " + react.message.channel +
+	elif react.emoji == client.get_emoji(599242099207962635): #cheat alert
+		if react.message.channel == trojsten.get_channel(599249382038044703): #moderating channel
+			nafetch = weird_messages[react.message.id]
+			react.message = await trojsten.get_channel(nafetch[1]).fetch_message(nafetch[0])
+			if react.message.author.dm_channel == None:
+				await react.message.author.create_dm()
+			await react.message.author.dm_channel.send(react.message.author.name + ". Moderators decided, that your message (details below) violated rules, and is now deleted. Please respect server rules.")
+			sent = datetime.time(hour = react.message.created_at.time().hour + 2, minute = react.message.created_at.time().minute, second = react.message.created_at.time().second)
+			#react.message.created_at.time().hour += 2
+			await react.message.author.dm_channel.send("Message details:\nCreated at: " + sent.isoformat(timespec="seconds") + " of UTC+2" +
+														"\nSent to: " + react.message.channel.name +
 														"\nContents: " + react.message.content)
-		if user in trojsten.get_role(598517418968743957).members and react.messae.channel != trojsten.get_channel(599249382038044703):
-			await react.message.channel.send(react.message.author + "!!! Your message was deleted because of serious rules violation. You now get an official warning. You get server ban on 3-rd warning.")
+		#elif user in trojsten.get_role(598517418968743957).members and react.message.channel != trojsten.get_channel(599249382038044703): #role: Veducko, channel: isnt #moderating
+		#	await react.message.channel.send(react.message.author + "!!! Your message was deleted because of serious rules violation.")
 		await react.message.delete()
-		if react.message.author.name not in warnings:
-			warnings.update({react.message.author.name: [warnings[react.message.author.name], "CHEAT alert emoji"]})
-		else:
-			warnings[react.message.author.name][0] += 1
-			warnings[react.message.author.name].append("CHEAT alert emoji")
+		await add_warning(react.message.author, "CHEAT alert emoji")
 
 		
 	elif react.emoji == client.get_emoji(599248755186728966):
 		chan = trojsten.get_channel(599249382038044703)
-		newmsg = await chan.send("Questionable message in " + react.message.channel.name + ": " + react.message.content)
-		weird_messages.update({newmsg.id: react.message.id})
+		newmsg = await chan.send("Questionable message in " + react.message.channel.name + ": " + react.message.content + "\nLink: " + react.message.jump_url)
+		weird_messages[newmsg.id] = (react.message.id, react.message.channel.id)
 	
 	
 
