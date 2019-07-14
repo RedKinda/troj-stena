@@ -12,8 +12,8 @@ commands = asyncio.Queue()
 
 ready = False
 client = discord.Client()
-@client.event
 
+@client.event
 async def on_ready():
 	global warnings
 	global weird_messages
