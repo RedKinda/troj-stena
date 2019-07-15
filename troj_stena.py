@@ -14,6 +14,23 @@ commands = asyncio.Queue()
 ready = False
 client = discord.Client()
 
+
+id_bank = {"botrole"			:	598502023079657483,
+		   "zaujimave-ulohy"	:	598522778743734342,
+		   "timeOut role"		:	598815157975515147,
+		   "misko emoji"		:	598820789168373778,
+		   "solved emoji"		:	598782166121316363,
+		   "cheatalert emoji"	:	599242099207962635,
+		   "moderating channel"	:	599249382038044703,
+		   "questionable emoji"	:	599248755186728966,
+		   "thup emoji"			:	598508913372954634,
+		   "thdown emoji"		:	598509040540057600,
+		   "badin emoji"		:	598483292034957312,
+
+
+		   }
+
+
 @client.event
 async def on_ready():
 	global warnings
@@ -30,7 +47,7 @@ async def on_ready():
 	print("I am ready as", client.user.name + "#" + str(client.user.discriminator))
 	trojsten = client.guilds[0]
 	categories = []
-	botrole = trojsten.get_role(598502023079657483)
+	botrole = trojsten.get_role(id_bank["botrole"])
 	seminars = []
 	warnings = {}
 	subscribes = {}
@@ -77,7 +94,7 @@ async def commandloop():
 async def new_interesting(command):
 	if command.msg.channel.name == "zaujimave-ulohy" or command.msg.channel.name == "ad min":
 		if command.msg.channel.name == "ad min":
-			command.msg.channel = client.get_channel(598522778743734342)
+			command.msg.channel = client.get_channel(id_bank["zaujimave-ulohy"])
 		await command.msg.channel.send("Hey guys, " + command.msg.author.name + " just posted a problem! Author can mark this problem " 
 			+ "<:solved:598782166121316363> once it is solved.")
 		await message.pin()
@@ -146,7 +163,7 @@ async def on_message(message):
 
 
 	slowmode = 10
-	if message.author in trojsten.get_role(598815157975515147).members: #timeOut role
+	if message.author in trojsten.get_role(id_bank["timeOut role"]).members: #timeOut role
 		if message.author.name not in timeouts:
 			timeouts[message.author.name] = time.time()
 		elif timeouts[message.author.name] + slowmode > time.time():
@@ -156,7 +173,7 @@ async def on_message(message):
 			timeouts[message.author.name] = time.time()
 
 	if message.author.name=="Girl Jesus":
-		await message.add_reaction(client.get_emoji(598820789168373778)) #misko emoji
+		await message.add_reaction(client.get_emoji(id_bank["misko emoji"])) #misko emoji
 
 	if message.content.startswith("$"):
 		if " " in message.content:
@@ -201,11 +218,11 @@ async def on_reaction_add(react, user):
 	global trojsten
 	global warnings
 	global weird_messages
-	if react.message.channel.name == "zaujimave-ulohy"  and react.emoji == client.get_emoji(598782166121316363) and await react_iter(react.message.author, react.users) and react.message.pinned and react.message.content.startswith("$new"):
+	if react.message.channel.name == "zaujimave-ulohy"  and react.emoji == client.get_emoji(id_bank["solved emoji"]) and await react_iter(react.message.author, react.users) and react.message.pinned and react.message.content.startswith("$new"):
 		await react.message.channel.send("WOW, somebody has solved " + react.message.author.name + "'s problem: " + react.message.content[5:] + "! Congrats!")
 		await react.message.unpin()
-	elif react.emoji == client.get_emoji(599242099207962635): #cheat alert
-		if react.message.channel == trojsten.get_channel(599249382038044703): #moderating channel
+	elif react.emoji == client.get_emoji(id_bank["cheatalert emoji"]): #cheat alert
+		if react.message.channel == trojsten.get_channel(id_bank["moderating channel"]): #moderating channel
 			nafetch = weird_messages[react.message.id]
 			react.message = await trojsten.get_channel(nafetch[1]).fetch_message(nafetch[0])
 			if react.message.author.dm_channel == None:
@@ -222,8 +239,8 @@ async def on_reaction_add(react, user):
 		await add_warning(react.message.author, "CHEAT alert emoji")
 
 		
-	elif react.emoji == client.get_emoji(599248755186728966):
-		chan = trojsten.get_channel(599249382038044703)
+	elif react.emoji == client.get_emoji(id_bank["questionable emoji"]):
+		chan = trojsten.get_channel(id_bank["moderating channel"])
 		newmsg = await chan.send("Questionable message in " + react.message.channel.name + ": " + react.message.content + "\nLink: " + react.message.jump_url)
 		weird_messages[newmsg.id] = (react.message.id, react.message.channel.id)
 	
@@ -313,9 +330,9 @@ class Seminar:
 				#reacty = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "keycap_ten"]
 				#for r in range(self.zadani):
 				#	msg.add_reaction
-				await msg.add_reaction(client.get_emoji(598508913372954634))
-				await msg.add_reaction(client.get_emoji(598509040540057600))
-				await msg.add_reaction(client.get_emoji(598483292034957312))
+				await msg.add_reaction(client.get_emoji(id_bank["thup emoji"]))
+				await msg.add_reaction(client.get_emoji(id_bank["thdown emoji"]))
+				await msg.add_reaction(client.get_emoji(id_bank["badin emoji"]))
 	
 	def set_result_table(self, dict):
 		self.last_results = self.result_table
