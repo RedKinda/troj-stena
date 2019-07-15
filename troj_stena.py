@@ -24,7 +24,7 @@ async def on_ready():
 	global ready
 	global seminars
 	global filehandler
-
+	global subscribes
 	ready = True
 	timeouts = {}
 	print("I am ready as", client.user.name + "#" + str(client.user.discriminator))
@@ -33,6 +33,7 @@ async def on_ready():
 	botrole = trojsten.get_role(598502023079657483)
 	seminars = []
 	warnings = {}
+	subscribes = {}
 	weird_messages = {}
 	try:			#loading seminars
 		reader = open('information.dat', 'rb')
@@ -54,28 +55,34 @@ async def on_ready():
 	#	await s.voting("release")
 	await commandloop()
 
-	
+class Command:
+	def __init__(self, command, is_dm, rest_of_message):
+		self.command = command
+		self.is_from_dm = is_dm
+		self.msg = rest_of_message
+
 async def commandloop():
 	while True:
 		inp = await commands.get()
-		print(inp[0] + " with " + inp[1].content)
+		print(inp.command + " with " + inp.msg.content)
 		coms = {"new":		new_interesting,
 				"purge":	admin_purge,
+				"subscribe":sub,
 				}
 		#if inp.content.startswith("new"):
 		#	await new_interesting(inp)
-		await coms[inp[0]](inp[1])
+		await coms[inp.command](inp)
 
 
-async def new_interesting(message):
-	if message.channel.name == "zaujimave-ulohy" or message.channel.name == "ad min":
-		if message.channel.name == "ad min":
-			message.channel = client.get_channel(598522778743734342)
-		await message.channel.send("Hey guys, " + message.author.name + " just posted a problem! Author can mark this problem " 
+async def new_interesting(command):
+	if command.msg.channel.name == "zaujimave-ulohy" or command.msg.channel.name == "ad min":
+		if command.msg.channel.name == "ad min":
+			command.msg.channel = client.get_channel(598522778743734342)
+		await command.msg.channel.send("Hey guys, " + command.msg.author.name + " just posted a problem! Author can mark this problem " 
 			+ "<:solved:598782166121316363> once it is solved.")
 		await message.pin()
 
-async def admin_purge(msg):
+async def admin_purge(command):
 	#purges server
 	if msg.author.name == "MvKal":
 		if msg.content != None:
@@ -86,7 +93,13 @@ async def admin_purge(msg):
 		#	if ch.type == "text":
 		#		print("Inquisiting " + ch.name)
 		#		await ch.purge(limit = None)
-				
+		
+async def sub(command):
+	global subscribes
+	if command.is_from_dm:
+		subscribes[command.msg.content.lower()] = command.msg.author.id
+		await msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
+
 async def permaloop():
 	global last_update
 	intervals = 900
@@ -303,10 +316,20 @@ class Seminar:
 				await msg.add_reaction(client.get_emoji(598483292034957312))
 	
 	def set_result_table(self, dict):
+		self.last_results = self.result_table
 		self.result_table = dict
 
 	async def update_on_results(self):
 		await self.cat_channel.text_channels[0].send("Hey guys, some random veducko added some points! Go and check it out on " + self.url + "/vysledky/")
+		global subscribes
+		for key in subscribes:
+			try:
+				if self.result_table.index(key) != self.last_results.index(key):
+					await client.get_user(subscribes[key]).dm_channel.send("HEY, " + key + " has changed his position! Go check it out on "+ self.url + "/vysledky")
+			except Exception as e:
+				print("Couldn't notify " + client.get_user.name + " about change in results table about " + subscribes[key])
+				print(e)
+				
 	
 	async def end_message(self):
 		await self.cat_channel.text_channels[0].send("The round of " + self.name + " has officialy ended. Congratulations to every sucessful participant!")
@@ -373,7 +396,7 @@ class Seminar:
 							pointers.append(None if clovek[i][0].text == None else clovek[i][0].text.strip())
 					results.append(person(state,name,year,school,level,points_before,pointers,points_sum))
 				if (self.result_table != results): output.append("new results")
-				self.results_table = results	
+				self.set_result_table(results)	
 			if('task-list' in task_list.attrib['class']):
 				self.active = True
 				round_info = treeP.find('.//small').text.replace('\n','').replace(' ','').split(',')
