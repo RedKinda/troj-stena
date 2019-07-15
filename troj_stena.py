@@ -58,7 +58,7 @@ async def on_ready():
 async def commandloop():
 	while True:
 		inp = await commands.get()
-		print(inp[0] + inp[1].content)
+		print(inp[0] + " with " + inp[1].content)
 		coms = {"new":		new_interesting,
 				"purge":	admin_purge,
 				}
@@ -77,13 +77,15 @@ async def new_interesting(message):
 
 async def admin_purge(msg):
 	#purges server
-	if msg.author == "MvKal":
+	if msg.author.name == "MvKal":
 		if msg.content != None:
 			await trojsten.get_channel(int(msg.content)).purge(limit = None)
-		for ch in trojsten.channels:
-			if ch.type == "text":
-				print("Inquisiting " + ch.name)
-				await ch.purge(limit = None)
+		else:
+			print("specify channel")
+		#for ch in trojsten.channels:
+		#	if ch.type == "text":
+		#		print("Inquisiting " + ch.name)
+		#		await ch.purge(limit = None)
 				
 async def permaloop():
 	global last_update
@@ -116,7 +118,10 @@ async def on_message(message):
 			if " " in message.content:
 				words = message.content[1:].split(" ")
 				message.content = " ".join(words[1:])
-				message.channel.name = "ad min"
+				try:
+					message.channel.name = "ad min"
+				except:
+					pass
 				await commands.put((words[0], message))
 			else:
 				await commands.put((message.content[1:], None))
@@ -155,10 +160,11 @@ async def add_warning(user, reason):
 	else:
 		warnings[user.name][0] += 1
 		warnings[user.name].append(reason)
+	print(user.name + " got warning because of " + reason + ". He has " + str(warnings[user.name][0]) + " warnings.")
 	if warnings[user.name][0] >= warnings_to_ban:
 		try:
-			await trojsten.ban(user, reason = ", ".join(warnings[user.name][1:]) + "banned by bot." , delete_message_days = 0)
-			await user.dm_channel.send("Number of warnings have reached " + warnings_to_ban + ". You are now banned from Trojsten server.")
+			await trojsten.ban(user, reason = ", ".join(warnings[user.name][1:]) + " --banned by bot." , delete_message_days = 0)
+			await user.dm_channel.send("Number of warnings have reached " + str(warnings_to_ban) + ". You are now banned from Trojsten server.")
 		except Exception as e:
 			await user.dm_channel.send("You have reached maximum number of warnings, but I am unable to ban you for some reason. High lord MvKal is notified about this and will deal with you accordingly.")
 			await trojsten.owner.dm_channel.send("I am unable to ban " + user.name + ", but he has reached maximum warnings. Handle this situation accordingly.\nException in console")
