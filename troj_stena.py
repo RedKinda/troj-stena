@@ -97,13 +97,13 @@ async def new_interesting(command):
 			command.msg.channel = client.get_channel(id_bank["zaujimave-ulohy"])
 		await command.msg.channel.send("Hey guys, " + command.msg.author.name + " just posted a problem! Author can mark this problem " 
 			+ "<:solved:598782166121316363> once it is solved.")
-		await message.pin()
+		await command.msg.pin()
 
 async def admin_purge(command):
 	#purges server
-	if msg.author.name == "MvKal":
-		if msg.content != None:
-			await trojsten.get_channel(int(msg.content)).purge(limit = None)
+	if command.msg.author.name == "MvKal":
+		if command.msg.content != None:
+			await trojsten.get_channel(int(command.msg.content)).purge(limit = None)
 		else:
 			print("specify channel")
 		#for ch in trojsten.channels:
@@ -115,7 +115,7 @@ async def sub(command):
 	global subscribes
 	if command.is_from_dm:
 		subscribes[command.msg.content.lower()] = command.msg.author.id
-		await msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
+		await command.msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
 
 async def permaloop():
 	#global last_update
