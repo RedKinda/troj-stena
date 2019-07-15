@@ -74,9 +74,12 @@ async def new_interesting(message):
 		await message.channel.send("Hey guys, " + message.author.name + " just posted a problem! Author can mark this problem " 
 			+ "<:solved:598782166121316363> once it is solved.")
 		await message.pin()
+
 async def admin_purge(msg):
 	#purges server
 	if msg.author == "MvKal":
+		if msg.content != None:
+			await trojsten.get_channel(int(msg.content)).purge(limit = None)
 		for ch in trojsten.channels:
 			if ch.type == "text":
 				print("Inquisiting " + ch.name)
