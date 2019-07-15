@@ -101,8 +101,10 @@ async def sub(command):
 		await msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
 
 async def permaloop():
-	global last_update
+	#global last_update
+
 	intervals = 900
+	last_update = 0
 	while True:
 		if last_update + 900 < time.time():
 			last_update = time.time()
@@ -135,9 +137,9 @@ async def on_message(message):
 					message.channel.name = "ad min"
 				except:
 					pass
-				await commands.put((words[0], message))
+				await commands.put(Command(words[0], True, message))
 			else:
-				await commands.put((message.content[1:], None))
+				await commands.put(Command(words[0], True, None))
 		else:
 			await message.channel.send("Sorry, I have no functionality relating DM channels yet.. Enjoy my presence on Trojsten server instead :)")
 		return
@@ -160,9 +162,9 @@ async def on_message(message):
 		if " " in message.content:
 			words = message.content[1:].split(" ")
 			message.content = " ".join(words[1:])
-			await commands.put((words[0], message))
+			await commands.put(Command(words[0], False, message))
 		else:
-			await commands.put((message.content[1:], None))
+			await commands.put(Command(words[0], False, None))
 
 	
 
