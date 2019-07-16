@@ -42,16 +42,16 @@ async def on_ready():
 	global seminars
 	global filehandler
 	global subscribes
-	ready = True
-	timeouts = {}
+
+
 	print("I am ready as", client.user.name + "#" + str(client.user.discriminator))
-	trojsten = client.guilds[0]
-	categories = []
+	trojsten = client.get_guild(598476317758849024) #trojsten server
 	botrole = trojsten.get_role(id_bank["botrole"])
-	seminars = []
 	warnings = {}
 	subscribes = {}
+	timeouts = {}
 	weird_messages = {}
+
 	try:			#loading seminars
 		reader = open('information.dat', 'rb')
 		seminars = pickle.load(reader)
@@ -65,12 +65,16 @@ async def on_ready():
 		#Debug web gathering --> print first contestant in result table for seminar x
 		#print(seminars[1].result_table[0].print_contents())
 		pickle.dump(seminars, filehandler)
+
 	for sem in seminars:
 		sem.cat_channel = client.get_channel(sem.cat_channel)
+
 	filehandler = open('information.dat', 'wb')
 	for s in seminars:
 		await s.voting("release")
+	
 	await commandloop()
+	ready = True
 
 class Command:
 	def __init__(self, command, is_dm, rest_of_message):
