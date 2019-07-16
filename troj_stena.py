@@ -26,7 +26,11 @@ id_bank = {"botrole"			:	598502023079657483,
 		   "thup emoji"			:	598508913372954634,
 		   "thdown emoji"		:	598509040540057600,
 		   "badin emoji"		:	598483292034957312,
-
+		   "ksprole"			:	600750067929841736,
+		   "kmsrole"			:	600750035801604184,
+		   "fksrole"			:	600750477289848836,
+		   "praskrole"			:	600750779447509002,
+		   "uforole"			:	600750981483069458
 
 		   }
 
@@ -130,6 +134,7 @@ async def permaloop():
 				res = s.get_info()
 				for change in res:
 					if change == "new problems":
+						s.newroundmessage()
 						s.voting("release")
 					elif change == "new solutions":
 						s.voting("ideal solutions")
@@ -288,10 +293,11 @@ class GatheringException(Exception):
 
 class Seminar:
 	def __init__(self, name, category_channel,url):
+		global trojsten
 		self.name = name
 		self.cat_channel = category_channel
 		self.url = url 
-
+		self.role = trojsten.get_role(id_bank[self.name+"role"])
 		self.active = False
 		self.year = 0
 		self.round = 0
@@ -300,6 +306,10 @@ class Seminar:
 		self.result_table = []
 		self.get_info()
 		self.p_length = len(self.problems)
+
+	async def newroundmessage(self):
+		msg = "**New round of {0.mention} started!** \n You can start solving now -> {1}".format(self.role,self.url+"/ulohy")
+		await  self.cat_channel.send(msg)
 
 	async def voting(self, type):
 		self.get_info()
