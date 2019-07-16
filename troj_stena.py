@@ -51,12 +51,12 @@ async def on_ready():
 	subscribes = {}
 	timeouts = {}
 	weird_messages = {}
-
-	try:			#loading seminars
+	filehandler = open('information.dat', 'wb+')
+	try:			#loading seminarsi
 		reader = open('information.dat', 'rb')
 		seminars = pickle.load(reader)
+		reader.close()
 	except EOFError: #if there is no file, create them
-		filehandler = open('information.dat', 'wb+')
 		seminars = [Seminar("kms", 598476702527651841, "https://kms.sk"),
 					Seminar("ksp", 598479504595484683, "https://ksp.sk"),
 					Seminar("fks", 598479519296389122, "https://fks.sk"),
@@ -65,13 +65,10 @@ async def on_ready():
 		#Debug web gathering --> print first contestant in result table for seminar x
 		#print(seminars[1].result_table[0].print_contents())
 		pickle.dump(seminars, filehandler)
-
 	for sem in seminars:
 		sem.cat_channel = client.get_channel(sem.cat_channel)
-
-	filehandler = open('information.dat', 'wb')
-	for s in seminars:
-		await s.voting("release")
+	#for s in seminars:
+	#	await s.voting("release")
 	
 	await commandloop()
 	ready = True
