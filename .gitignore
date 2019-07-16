@@ -1,0 +1,4 @@
+# visual studio files
+.vs
+*.snl
+*.pyproj
