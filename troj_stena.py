@@ -26,6 +26,7 @@ id_bank = {"botrole"			:	598502023079657483,
 		   "thup emoji"			:	598508913372954634,
 		   "thdown emoji"		:	598509040540057600,
 		   "badin emoji"		:	598483292034957312,
+		   "MvKal"				:	332935845004705793,
 
 
 		   }
@@ -70,11 +71,17 @@ async def on_ready():
 		sem.cat_channel = client.get_channel(sem.cat_channel)
 
 	filehandler = open('information.dat', 'wb')
-	for s in seminars:
-		await s.voting("release")
+	#for s in seminars:
+	#	await s.voting("release")
 	
 	await commandloop()
 	ready = True
+
+def save():
+	global filehandler
+	global seminars
+	pickle.dump(seminars, filehandler)
+
 
 class Command:
 	def __init__(self, command, is_dm, rest_of_message):
@@ -89,6 +96,7 @@ async def commandloop():
 		coms = {"new":		new_interesting,
 				"purge":	admin_purge,
 				"subscribe":sub,
+				"exit":		quyeet,
 				}
 		#if inp.content.startswith("new"):
 		#	await new_interesting(inp)
@@ -105,7 +113,7 @@ async def new_interesting(command):
 
 async def admin_purge(command):
 	#purges server
-	if command.msg.author.name == "MvKal":
+	if command.msg.author == client.get_user(id_bank["MvKal"]):
 		if command.msg.content != None:
 			await trojsten.get_channel(int(command.msg.content)).purge(limit = None)
 		else:
@@ -121,12 +129,20 @@ async def sub(command):
 		subscribes[command.msg.content.lower()] = command.msg.author.id
 		await command.msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
 
+async def quyeet(command):
+	if command.is_from_dm and command.msg.author == client.get_user(id_bank["MvKal"]):
+		save()
+		await client.close()
+		exit()
+
+
 async def permaloop():
 	#global last_update
 
 	intervals = 900
 	last_update = 0
 	while True:
+		await asyncio.sleep(2)
 		if last_update + 900 < time.time():
 			last_update = time.time()
 			for s in seminars:
@@ -150,7 +166,7 @@ async def on_message(message):
 		return
 
 	if message.author.dm_channel == message.channel:
-		if message.author.name=="MvKal":
+		if message.author == client.get_user(id_bank["MvKal"]):
 			if " " in message.content:
 				words = message.content[1:].split(" ")
 				message.content = " ".join(words[1:])
