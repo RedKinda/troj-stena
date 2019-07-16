@@ -68,8 +68,8 @@ async def on_ready():
 	for sem in seminars:
 		sem.cat_channel = client.get_channel(sem.cat_channel)
 	filehandler = open('information.dat', 'wb')
-	#for s in seminars:
-	#	await s.voting("release")
+	for s in seminars:
+		await s.voting("release")
 	await commandloop()
 
 class Command:
