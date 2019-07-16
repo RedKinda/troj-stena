@@ -30,7 +30,9 @@ id_bank = {"botrole"			:	598502023079657483,
 		   "kmsrole"			:	600750035801604184,
 		   "fksrole"			:	600750477289848836,
 		   "praskrole"			:	600750779447509002,
-		   "uforole"			:	600750981483069458
+		   "uforole"			:	600750981483069458,
+		   "MvKal"				:	332935845004705793,
+		   "voting channel"		:	600688938562093058
 
 		   }
 
@@ -47,7 +49,7 @@ async def on_ready():
 	global filehandler
 	global subscribes
 
-
+	ready = True
 	print("I am ready as", client.user.name + "#" + str(client.user.discriminator))
 	trojsten = client.get_guild(598476317758849024) #trojsten server
 	botrole = trojsten.get_role(id_bank["botrole"])
@@ -61,22 +63,28 @@ async def on_ready():
 		seminars = pickle.load(reader)
 		reader.close()
 	except EOFError: #if there is no file, create them
-		seminars = [Seminar("kms", 598476702527651841, "https://kms.sk"),
-					Seminar("ksp", 598479504595484683, "https://ksp.sk"),
-					Seminar("fks", 598479519296389122, "https://fks.sk"),
-					Seminar("ufo", 598479666205949952, "https://ufo.fks.sk"),
-					Seminar("prask", 598479637093416973, "https://prask.ksp.sk")]
+		seminars = [Seminar("kms", 598481957285920778, "https://kms.sk"),
+					Seminar("ksp", 598481977938542603, "https://ksp.sk"),
+					Seminar("fks", 598482014324129803, "https://fks.sk"),
+					Seminar("ufo", 598482065708548126, "https://ufo.fks.sk"),
+					Seminar("prask", 598482110616961054, "https://prask.ksp.sk")]
 		#Debug web gathering --> print first contestant in result table for seminar x
 		#print(seminars[1].result_table[0].print_contents())
 		pickle.dump(seminars, filehandler)
 	for sem in seminars:
-		sem.cat_channel = client.get_channel(sem.cat_channel)
+		sem.m_channel = client.get_channel(sem.m_channel)
 	#for s in seminars:
 	#	await s.voting("release")
 	
 	await commandloop()
-	ready = True
+	
 
+def save():
+	global filehandler
+	global seminars
+	pickle.dump(seminars, filehandler)
+
+	
 class Command:
 	def __init__(self, command, is_dm, rest_of_message):
 		self.command = command
@@ -90,6 +98,7 @@ async def commandloop():
 		coms = {"new":		new_interesting,
 				"purge":	admin_purge,
 				"subscribe":sub,
+				"exit":		quyeet,
 				}
 		#if inp.content.startswith("new"):
 		#	await new_interesting(inp)
@@ -106,7 +115,7 @@ async def new_interesting(command):
 
 async def admin_purge(command):
 	#purges server
-	if command.msg.author.name == "MvKal":
+	if command.msg.author == client.get_user(id_bank["MvKal"]):
 		if command.msg.content != None:
 			await trojsten.get_channel(int(command.msg.content)).purge(limit = None)
 		else:
@@ -122,12 +131,20 @@ async def sub(command):
 		subscribes[command.msg.content.lower()] = command.msg.author.id
 		await command.msg.channel.send("Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
 
+async def quyeet(command):
+	if command.is_from_dm and command.msg.author == client.get_user(id_bank["MvKal"]):
+		save()
+		await client.close()
+		exit()
+
+
 async def permaloop():
 	#global last_update
 
 	intervals = 900
 	last_update = 0
 	while True:
+		await asyncio.sleep(2)
 		if last_update + 900 < time.time():
 			last_update = time.time()
 			for s in seminars:
@@ -152,14 +169,10 @@ async def on_message(message):
 		return
 
 	if message.author.dm_channel == message.channel:
-		if message.author.name=="MvKal":
+		if message.author == client.get_user(id_bank["MvKal"]):
 			if " " in message.content:
 				words = message.content[1:].split(" ")
 				message.content = " ".join(words[1:])
-				try:
-					message.channel.name = "ad min"
-				except:
-					pass
 				await commands.put(Command(words[0], True, message))
 			else:
 				await commands.put(Command(words[0], True, None))
@@ -252,15 +265,6 @@ async def on_reaction_add(react, user):
 	
 	
 
-'''
-check nove zadania
-vzoraky
-check vysledkoviek
-ratingy na ulohy
-
-'''
-
-
 
 class problem:
 	def __init__(self,name,link,points):
@@ -292,10 +296,10 @@ class GatheringException(Exception):
 
 
 class Seminar:
-	def __init__(self, name, category_channel,url):
+	def __init__(self, name, outchan, url):
 		global trojsten
 		self.name = name
-		self.cat_channel = category_channel
+		self.m_channel = outchan
 		self.url = url 
 		self.role = trojsten.get_role(id_bank[self.name+"role"])
 		self.active = False
@@ -309,24 +313,15 @@ class Seminar:
 
 	async def newroundmessage(self):
 		msg = "**New round of {0.mention} started!** \n You can start solving now -> {1}".format(self.role,self.url+"/ulohy")
-		await  self.cat_channel.send(msg)
+		await  self.outchan.send(msg)
 
 	async def voting(self, type):
 		self.get_info()
 		if self.active:
 			global botrole
 			global trojsten
-			vote_channel = None
-			for chan in self.cat_channel.text_channels:
-				if chan.name == "voting":
-					vote_channel = chan
-					break
-			if vote_channel == None:
-				overwrites = {
-					trojsten.default_role: discord.PermissionOverwrite(send_messages = False, add_reactions = False),
-					botrole: discord.PermissionOverwrite(send_messages=True, add_reactions = True)
-				}
-				vote_channel = await self.cat_channel.create_text_channel("voting", overwrites = overwrites)
+			vote_channel = trojsten.get_channel(id_bank["voting channel"])
+		
 
 			if type=="release":
 				await vote_channel.send("Hello, new problems are released!! You may now vote for each problem here <:badin:598483292034957312>")
@@ -350,7 +345,7 @@ class Seminar:
 		self.result_table = dict
 
 	async def update_on_results(self):
-		await self.cat_channel.text_channels[0].send("Hey guys, some random veducko added some points! Go and check it out on " + self.url + "/vysledky/")
+		#await self.m_channel.send("Hey guys, some random veducko added some points! Go and check it out on " + self.url + "/vysledky/")
 		global subscribes
 		for key in subscribes:
 			try:
@@ -362,7 +357,7 @@ class Seminar:
 				
 	
 	async def end_message(self):
-		await self.cat_channel.text_channels[0].send("The round of " + self.name + " has officialy ended. Congratulations to every sucessful participant!")
+		await self.m_channel.send("The round of " + self.name + " has officialy ended. Congratulations to every sucessful participant!")
 	
 	
 
@@ -457,19 +452,6 @@ class Seminar:
 		except:
 			raise GatheringException(self.name,"Gathering error occured")
 
-		'''
-async def console_input():
-	global trojsten
-	global botrole
-	global seminars
-	while True:
-		try:
-			inp = await ainput("")
-			exec(inp)
-		except Exception as e: 
-			print(e)
-		asyncio.sleep(0.5)
-			'''
-
+#TODO: mergenut voting channely do jedneho, lebo je to moc zaspamovane
 
 client.run("NTk4NDc3MjI2NTg0OTY1MTIy.XSXTWg.IgQkQwMI-4KV-gHoz7aDXguq6U8")
