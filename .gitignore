@@ -3,3 +3,9 @@
 *.snl
 *.pyproj
 .idea
+
+# enviromental variables file
+.env
+
+# test folder
+testing_files
