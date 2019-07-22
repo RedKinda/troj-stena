@@ -15,6 +15,7 @@ from discord.ext.commands import Bot
 from dotenv import load_dotenv
 
 import constants as cn
+import strings as st
 
 # from aioconsole import ainput
 
@@ -131,11 +132,12 @@ async def welcome_message():
         _rules += "{0}. {1}\n".format(i+1, udaje["rules"][i])
     for i in udaje["faq"]:
         _faq += "- {0}\n{1}\n".format(i[0], i[1])
-    _message = cn.DEFAULT_WELCOME_MESSAGE.format(cn.WELCOME_HEADER, _rules, _faq)
+    add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
+    _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     found = False
     logging.info("searching for welcome message ...")
     async for message in general.history():
-        if message.author.bot and message.content.startswith(cn.WELCOME_HEADER):
+        if message.author.bot and message.content.startswith(st.WELCOME_HEADER):
             logging.info("Found")
             found = True
             if (message.content != _message):
@@ -224,7 +226,7 @@ async def color_message():
         logging.info("Generating new ...")
         msg = await general.send(_message)
         _C = msg
-        reactions = ["⬜", "🔶", "💚", "🔵"]
+        reactions = [cn.WHITE_EMOJI, cn.ORANGE_EMOJI, cn.GREEN_EMOJI, cn.BLUE_EMOJI]
         for emoji in reactions:
             await msg.add_reaction(emoji=emoji)
     else:
@@ -236,13 +238,13 @@ async def color_message():
             blue = trojsten.get_role(cn.BLUE_ROLE)
             async for reactor in react.users():
                 if (white or orange or green or blue) not in reactor.roles:
-                    if react.emoji == "⬜":
+                    if react.emoji == cn.WHITE_EMOJI:
                         await reactor.add_roles(white)
-                    elif react.emoji == "🔶":
+                    elif react.emoji == cn.ORANGE_EMOJI:
                         await reactor.add_roles(orange)
-                    elif react.emoji == "💚":
+                    elif react.emoji == cn.GREEN_EMOJI:
                         await reactor.add_roles(green)
-                    elif react.emoji == "🔵":
+                    elif react.emoji == cn.BLUE_EMOJI:
                         await reactor.add_roles(blue)
         logging.info("React <-> Role sync - OK")
 
@@ -278,13 +280,13 @@ async def on_raw_reaction_add(payload):
         green = trojsten.get_role(cn.GREEN_ROLE)
         blue = trojsten.get_role(cn.BLUE_ROLE)
         if white not in user.roles and orange not in user.roles and green not in user.roles and blue not in user.roles:
-            if payload.emoji.name == "⬜":
+            if payload.emoji.name == cn.WHITE_EMOJI:
                 await user.add_roles(white)
-            elif payload.emoji.name == "🔶":
+            elif payload.emoji.name == cn.ORANGE_EMOJI:
                 await user.add_roles(orange)
-            elif payload.emoji.name == "💚":
+            elif payload.emoji.name == cn.GREEN_EMOJI:
                 await user.add_roles(green)
-            elif payload.emoji.name == "🔵":
+            elif payload.emoji.name == cn.BLUE_EMOJI:
                 await user.add_roles(blue)
 
 
@@ -318,16 +320,16 @@ async def on_raw_reaction_remove(payload):
         orange = trojsten.get_role(cn.ORANGE_ROLE)
         green = trojsten.get_role(cn.GREEN_ROLE)
         blue = trojsten.get_role(cn.BLUE_ROLE)
-        if payload.emoji.name == "⬜":
+        if payload.emoji.name == cn.WHITE_EMOJI:
             if white in user.roles:
                 await user.remove_roles(white)
-        elif payload.emoji.name == "🔶":
+        elif payload.emoji.name == cn.ORANGE_EMOJI:
             if orange in user.roles:
                 await user.remove_roles(orange)
-        elif payload.emoji.name == "💚":
+        elif payload.emoji.name == cn.GREEN_EMOJI:
             if green in user.roles:
                 await user.remove_roles(green)
-        elif payload.emoji.name == "🔵":
+        elif payload.emoji.name == cn.BLUE_EMOJI:
             if blue in user.roles:
                 await user.remove_roles(blue)
 
@@ -353,13 +355,13 @@ async def add_warning(user, reason):
     if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
         try:
             await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
-            await user.dm_channel.send(cn.BAN_MSG.format(cn.WARNINGS_TO_BAN))
+            await user.dm_channel.send(st.BAN_MSG.format(cn.WARNINGS_TO_BAN))
         except Exception:
-            await user.dm_channel.send(cn.BAN_ERROR_U)
-            await trojsten.get_channel(cn.ADMIN_CHANNEL).send(cn.BAN_ERROR_A.format(user.name))
+            await user.dm_channel.send(st.BAN_ERROR_U)
+            await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
             logging.exception("Error while issuing ban")
     else:
-        await user.dm_channel.send(cn.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
+        await user.dm_channel.send(st.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
 
 
 @bot.event
@@ -372,7 +374,7 @@ async def on_reaction_add(react, user):
         comm = "{0}new".format(bot.get_prefix(react.message))
         if react.message.content.startswith(comm) and await react_iter(react.message.author, react.users):
             task_name = react.message.content[5:]
-            await react.message.channel.send(cn.TASK_COMPLETED.format(react.message.author.name, task_name))
+            await react.message.channel.send(st.TASK_COMPLETED.format(react.message.author.name, task_name))
             await react.message.unpin()
 
     elif react.emoji == bot.get_emoji(cn.CHEATALERT_EMOJI):  # cheat alert
@@ -381,7 +383,7 @@ async def on_reaction_add(react, user):
             react.message = await trojsten.get_channel(nafetch[1]).fetch_message(nafetch[0])
             if react.message.author.dm_channel is None:
                 await react.message.author.create_dm()
-            await react.message.author.dm_channel.send(cn.DELETE_NOTICE.format(react.message.author.mention))
+            await react.message.author.dm_channel.send(st.DELETE_NOTICE.format(react.message.author.mention))
             hour = react.message.created_at.time().hour + 2
             minute = react.message.created_at.time().minute
             second = react.message.created_at.time().second
@@ -390,7 +392,7 @@ async def on_reaction_add(react, user):
             timestr = sent.isoformat(timespec="seconds")
             r_chan = react.message.channel.name
             r_msg = react.message.content
-            details = cn.DELETE_DETAILS.format(timestr, cn.UTC_STRING, r_chan, r_msg)
+            details = st.DELETE_DETAILS.format(timestr, st.UTC_STRING, r_chan, r_msg)
             await react.message.author.dm_channel.send(details)
 
         # elif user in trojsten.get_role(598517418968743957).members and react.message.channel
@@ -402,7 +404,7 @@ async def on_reaction_add(react, user):
 
     elif react.emoji == bot.get_emoji(cn.QUESTIONABLE_EMOJI):
         chan = trojsten.get_channel(cn.MODERATING_CHANNEL)
-        s_message = cn.SUSPICIOUS_MESSAGES(react.message.channel.name, react.message.content, react.message.jump_url)
+        s_message = st.SUSPICIOUS_MESSAGES(react.message.channel.name, react.message.content, react.message.jump_url)
         newmsg = await chan.send(s_message)
         weird_messages[newmsg.id] = (react.message.id, react.message.channel.id)
 
@@ -432,9 +434,9 @@ async def on_reaction_add(react, user):
 
 # provides usage information for each command
 async def help_command(ctx):
-    help_header = cn.HELP_HEADER.format(ctx.prefix, ctx.command.name)
+    help_header = st.HELP_HEADER.format(ctx.prefix, ctx.command.name)
     msg_string = "```{0}\n{1}\n".format(help_header, cn.SEPARATOR_COUNT*cn.SEPARATOR)
-    for usage in cn.COMMANDS_HELP[ctx.command.name]:
+    for usage in st.COMMANDS_HELP[ctx.command.name]:
         if usage.startswith("*"):
             msg_string += "{0}\n".format(usage)
         else:
@@ -464,7 +466,7 @@ async def new(ctx):
     if ctx.channel == trojsten.get_channel(cn.TASKS_CHANNEL) or ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
         if ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
             tchannel = bot.get_channel(cn.TASKS_CHANNEL)
-        await tchannel.send(ctx.author.name + " práve pridal úlohu na vyriešenie, označí sa ✅, keď bude vyriešená.")
+        await tchannel.send(st.TASK_SUBMITED.format(ctx.author.name, cn.TASK_DONE_EMOJI))
         await ctx.pin()
 
 
@@ -475,7 +477,7 @@ async def admin_purge(ctx, channel):
         if channel is not None:
             await trojsten.get_channel(int(channel)).purge(limit=None)
         else:
-            await ctx.channel.send("Kanál je prázdny")
+            await ctx.channel.send(st.PURGE_EMPTY_CHANNEL)
 
 
 @bot.command(name='rule')
@@ -549,10 +551,10 @@ async def admin_faq(ctx, *args):
 async def subscribe(ctx, arg):
     global subscribers
     if arg == "list":
-        await ctx.channel.send(cn.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
+        await ctx.channel.send(st.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
     else:
         subscribers[str(ctx.author.id)].append(arg)
-        await ctx.channel.send(cn.SUB_RESPONSE.format(arg))
+        await ctx.channel.send(st.SUB_RESPONSE.format(arg))
 
 
 # define error classes
@@ -584,7 +586,11 @@ async def on_command_error(ctx, error):
     error = getattr(error, "original", error)
 
     if isinstance(error, commands.CommandNotFound):
-        await ctx.send("Príkaz nenájdený")
+        await ctx.send(st.CMD_NONEXISTENT)
+        return
+
+    if isinstance(error, commands.DisabledCommand):
+        await ctx.channel.send(st.DISABLED_ERROR)
         return
 
     if isinstance(error, commands.UserInputError):
@@ -593,29 +599,29 @@ async def on_command_error(ctx, error):
 
     if isinstance(error, commands.NoPrivateMessage):
         try:
-            await ctx.author.send("Tento príkaz sa nedá použiť v DM.")
+            await ctx.author.send(st.ONLY_GUILD_ERROR)
         except discord.Forbidden:
             pass
         return
 
     if isinstance(error, commands.PrivateMessageOnly):
-        await ctx.send("Tento príkaz sa dá použiť len v DM.")
+        await ctx.send(st.ONLY_DM_ERROR)
         return
 
     if isinstance(error, commands.CheckFailure):
-        await ctx.send("Nemáš práva na použitie tohoto príkazu.")
+        await ctx.send(st.PERMISSION_ERROR)
         return
 
     if isinstance(error, WrongChannel):
-        await ctx.send("{0}{1} sa dá použiť len v administrátorských chatoch.".format(ctx.prefix, ctx.command.name))
+        await ctx.send(st.CHANNEL_ERROR.format(ctx.prefix, ctx.command.name))
         return
 
     if isinstance(error, RuleNotFound):
-        await ctx.send(cn.RULE_NOT_FOUND)
+        await ctx.send(st.RULE_NOT_FOUND)
         return
 
     if isinstance(error, FaqNotFound):
-        await ctx.channel.send(cn.FAQ_NOT_FOUND)
+        await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
     logging.warning("Ignoring exception in command {0}:".format(ctx.command.name))
@@ -717,18 +723,18 @@ class Seminar:
     async def announcement(self, type):
         a_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
         if type == "release":
-            await a_channel.send(cn.TASKS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+            await a_channel.send(st.TASKS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
         elif type == "end":
-            await a_channel(cn.TASK_ROUND_END.format(trojsten.get_role(self.role)))
+            await a_channel(st.TASK_ROUND_END.format(trojsten.get_role(self.role)))
         elif type == "ideal solutions":
-            await a_channel.send(cn.SOLUTIONS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+            await a_channel.send(st.SOLUTIONS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
 
     async def voting(self):
         self.get_info()
         if self.active:
             vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
             await vote_channel.send(self.emoji_name())
-            await vote_channel.send("Tu môžeš označiť aktuálne úlohy, ktoré sa ti páčili:")
+            await vote_channel.send(st.VOTE_MESSAGE)
             for n in range(self.p_length):
                 await vote_channel.send(str(n+1) + ". " + self.problems[n].name)
 
@@ -742,11 +748,9 @@ class Seminar:
         for key in subscribers:
             try:
                 if self.result_table.index(key) != self.last_results.index(key):
-                    await bot.get_user(subscribers[key]).dm_channel.send("Pozícia, alebo body pre " + key +
-                                                                         " sa zmenili/a! Pozrieť sa môžeš tu -> " +
-                                                                         self.url + "/vysledky")
+                    await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
             except Exception:
-                logging.exception("Couldn't notify " + bot.get_user.name + " about change in results table")
+                logging.exception("Couldn't notify {0} about change in results table".format(bot.get_user.name))
 
     def get_info(self):
         try:
