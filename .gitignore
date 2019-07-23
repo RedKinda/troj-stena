@@ -2,3 +2,4 @@
 .vs
 *.snl
 *.pyproj
+.idea
