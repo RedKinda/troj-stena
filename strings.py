@@ -27,6 +27,9 @@ DEFAULT_FAQ_CONTENT = [["Som prvýkrát na discorde o čom to tu je?",
 
 ADDITIONAL_CONTENT = "\nAk sa cítiš ako vedúci alebo starec, napíš {0} a bude ti priradená skupina"
 
+ROLE_MESSAGE = "Nižšie si môžeš vybrať zo seminárov, ktoré riešiš alebo ťa zaujímajú:"
+COLOR_MESSAGE = "A farbu tvojho mena:"
+
 # event/system msgs
 TASKS_RELEASE = "**Kolo {0} je tu!** \n Riešenie sa môže začať -> {1}/ulohy"
 TASK_ROUND_END = "Kolo {0} skončilo. Gratulujeme úspešným riešitelom!"

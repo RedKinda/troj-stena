@@ -8,6 +8,17 @@ MINIMAL_UPDATE_DELAY = 900
 WARNINGS_TO_BAN = 3
 TIME_ZONE = 2
 UTC_STRING = "UTC+{0}".format(TIME_ZONE)
+
+KMS_URL = "https://kms.sk"
+KSP_URL = "https://ksp.sk"
+FKS_URL = "https://fks.sk"
+UFO_URL = "https://ufo.fks.sk"
+PRASK_URL = "https://prask.ksp.sk"
+SEMINAR_URLS = {"kms": KMS_URL,
+                "ksp": KSP_URL,
+                "fks": FKS_URL,
+                "ufo": UFO_URL,
+                "prask": PRASK_URL}
 # help commands
 SEPARATOR = "-"
 SEPARATOR_COUNT = 20
@@ -33,6 +44,16 @@ WELCOME_CHANNEL = 600944280650907678
 DEV_CHANNEL = 598490170236338176
 ADMIN_CHANNEL = 600384787433259010
 TESTING_CHANNEL = 601160389736136737
+KSP_CHANNEL = 598481977938542603
+KMS_CHANNEL = 598481957285920778
+FKS_CHANNEL = 598482014324129803
+PRASK_CHANNEL = 598482110616961054
+UFO_CHANNEL = 598482065708548126
+SEMINAR_CHANNELS = {"kms": KMS_CHANNEL,
+                    "ksp": KSP_CHANNEL,
+                    "fks": FKS_CHANNEL,
+                    "ufo": UFO_CHANNEL,
+                    "prask": PRASK_CHANNEL}
 
 # roles
 TIME_OUT_ROLE = 598815157975515147

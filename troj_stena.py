@@ -37,17 +37,12 @@ logging.basicConfig(level=logscope)
 
 @bot.event
 async def on_ready():
-    global trojsten
-    global warnings
-    global weird_messages
+    global trojsten, warnings, weird_messages, subscribers, seminars, udaje, ready
     # global timeouts
-    global subscribers
-    global seminars
-    global udaje
-    global ready
+
     ready = True
 
-    logging.info("Bot loaded as {0}#{1}".format(bot.user.name, str(bot.user.discriminator)))
+    logging.info(f"Bot loaded as {bot.user.name}#{str(bot.user.discriminator)}")
 
     trojsten = bot.get_guild(cn.GUILD_ID)
     if (trojsten is None):
@@ -71,8 +66,8 @@ async def on_ready():
         reader.close()
     except EOFError:  # if there is no file, create it
         udaje = {
-            "rules":   cn.DEFAULT_RULES,
-            "faq":   cn.DEFAULT_FAQ_CONTENT
+            "rules": cn.DEFAULT_RULES,
+            "faq": cn.DEFAULT_FAQ_CONTENT
         }
         pickle.dump(udaje, filehandler)
     filehandler = open(cn.MAIN_DATA_FILE, "wb+")
@@ -81,11 +76,11 @@ async def on_ready():
         seminars = pickle.load(reader)
         reader.close()
     except EOFError:  # if there is no file, create them
-        seminars = [Seminar("kms", 598481957285920778, "https://kms.sk"),
-                    Seminar("ksp", 598481977938542603, "https://ksp.sk"),
-                    Seminar("fks", 598482014324129803, "https://fks.sk"),
-                    Seminar("ufo", 598482065708548126, "https://ufo.fks.sk"),
-                    Seminar("prask", 598482110616961054, "https://prask.ksp.sk")]
+        seminars = [Seminar("kms"),
+                    Seminar("fks"),
+                    Seminar("ksp"),
+                    Seminar("ufo"),
+                    Seminar("prask")]
 
         # Debug web gathering --> print first contestant in result table for seminar x
         # print(seminars[1].result_table[0].print_contents())
@@ -101,23 +96,6 @@ async def on_ready():
     await role_message()
     await color_message()
 
-# Define basic methods
-
-
-def save(what="inf"):
-    if what == "inf":
-        fh = open(cn.MAIN_DATA_FILE, "wb")
-        pickle.dump(seminars, fh)
-        fh.close()
-    elif what == "con":
-        fh = open(cn.CONTENT_FILE, "wb")
-        pickle.dump(udaje, fh)
-        fh.close()
-    elif what == "sub":
-        fh = open(cn.SUBSCRIBER_FILE, "wb")
-        pickle.dump(subscribers, fh)
-        fh.close()
-
 
 # ###############################
 # ###### MESSAGE HANDLING #######
@@ -129,9 +107,9 @@ async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
     for i in range(len(udaje["rules"])):
-        _rules += "{0}. {1}\n".format(i+1, udaje["rules"][i])
+        _rules += f"{i+1}. {udaje['rules'][i]}\n"
     for i in udaje["faq"]:
-        _faq += "- {0}\n{1}\n".format(i[0], i[1])
+        _faq += f"- {i[0]}\n{i[1]}\n"
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     found = False
@@ -162,7 +140,7 @@ async def role_message():
     global _M
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     found = False
-    _message = "Nižšie si môžeš vybrať zo seminárov, ktoré riešiš alebo ťa zaujímajú:"
+    _message = st.ROLE_MESSAGE
     logging.info("Searching for role message ...")
     async for message in general.history():
         if message.author.bot and message.content == _message:
@@ -175,45 +153,32 @@ async def role_message():
         logging.info("Generating new")
         msg = await general.send(_message)
         _M = msg
-        await msg.add_reaction(bot.get_emoji(cn.KMS_EMOJI))
-        await msg.add_reaction(bot.get_emoji(cn.FKS_EMOJI))
-        await msg.add_reaction(bot.get_emoji(cn.KSP_EMOJI))
-        await msg.add_reaction(bot.get_emoji(cn.UFO_EMOJI))
-        await msg.add_reaction(bot.get_emoji(cn.PRASK_EMOJI))
+        for sem in seminars:
+            await msg.add_reaction(bot.get_emoji(sem.emoji))
     else:
         logging.info("React msg stat - OK")
         for react in message.reactions:
             async for reactor in react.users():
-                if react.emoji == bot.get_emoji(cn.KSP_EMOJI):
-                    ksp_r = trojsten.get_role(cn.KSP_ROLE)
-                    if ksp_r not in reactor.roles:
-                        await reactor.add_roles(ksp_r)
-                elif react.emoji == bot.get_emoji(cn.KMS_EMOJI):
-                    kms_r = trojsten.get_role(cn.KMS_ROLE)
-                    if kms_r not in reactor.roles:
-                        await reactor.add_roles(kms_r)
-                elif react.emoji == bot.get_emoji(cn.FKS_EMOJI):
-                    fks_r = trojsten.get_role(cn.FKS_ROLE)
-                    if fks_r not in reactor.roles:
-                        await reactor.add_roles(fks_r)
-                elif react.emoji == bot.get_emoji(cn.PRASK_EMOJI):
-                    prask_r = trojsten.get_role(cn.PRASK_ROLE)
-                    if prask_r not in reactor.roles:
-                        await reactor.add_roles(prask_r)
-                elif react.emoji == bot.get_emoji(cn.UFO_EMOJI):
-                    ufo_r = trojsten.get_role(cn.UFO_ROLE)
-                    if ufo_r not in reactor.roles:
-                        await reactor.add_roles(ufo_r)
-        logging.info("React <-> Role sync - OK")
+                for sem in seminars:
+                    if react.emoji == bot.get_emoji(sem.emoji) and trojsten.get_role(sem.role) not in reactor.roles:
+                        await reactor.add_roles(sem.role)
+                        logging.info(f"Added role {trojsten.get_role(sem.role).name} to {reactor.name}")
+        logging.info("React -> Role sync - OK")
+
 
 _C = None
+white = trojsten.get_role(cn.WHITE_ROLE)
+orange = trojsten.get_role(cn.ORANGE_ROLE)
+green = trojsten.get_role(cn.GREEN_ROLE)
+blue = trojsten.get_role(cn.BLUE_ROLE)
+colors = [(white, cn.WHITE_EMOJI), (orange, cn.ORANGE_EMOJI), (green, cn.GREEN_EMOJI), (blue, cn.BLUE_EMOJI)]
 
 
 async def color_message():
     global _C
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     found = False
-    _message = "A farbu tvojho mena:"
+    _message = st.COLOR_MESSAGE
     logging.info("Searching for color message ...")
     async for message in general.history():
         if message.author.bot and message.content == _message:
@@ -226,32 +191,23 @@ async def color_message():
         logging.info("Generating new ...")
         msg = await general.send(_message)
         _C = msg
-        reactions = [cn.WHITE_EMOJI, cn.ORANGE_EMOJI, cn.GREEN_EMOJI, cn.BLUE_EMOJI]
+        reactions = [x[1] for x in colors]
         for emoji in reactions:
             await msg.add_reaction(emoji=emoji)
     else:
         logging.info("Color msg stat - OK")
         for react in message.reactions:
-            white = trojsten.get_role(cn.WHITE_ROLE)
-            orange = trojsten.get_role(cn.ORANGE_ROLE)
-            green = trojsten.get_role(cn.GREEN_ROLE)
-            blue = trojsten.get_role(cn.BLUE_ROLE)
             async for reactor in react.users():
-                if (white or orange or green or blue) not in reactor.roles:
-                    if react.emoji == cn.WHITE_EMOJI:
-                        await reactor.add_roles(white)
-                    elif react.emoji == cn.ORANGE_EMOJI:
-                        await reactor.add_roles(orange)
-                    elif react.emoji == cn.GREEN_EMOJI:
-                        await reactor.add_roles(green)
-                    elif react.emoji == cn.BLUE_EMOJI:
-                        await reactor.add_roles(blue)
-        logging.info("React <-> Role sync - OK")
+                for role, emoji in colors:
+                    if role in reactor.roles and react.emoji == emoji:
+                        await reactor.add_roles(emoji)
+                        logging.info(f"Added role {trojsten.get_role(role).name} to {reactor.name}")
+        logging.info("React -> Role sync - OK")
 
 # endregion
 
 # ##############################
-# ###### EVENT HANDELING #######
+# ###### EVENT HANDLING  #######
 # ##############################
 
 # region Events
@@ -263,75 +219,29 @@ async def color_message():
 async def on_raw_reaction_add(payload):
     if payload.channel_id == cn.WELCOME_CHANNEL and _M.id == payload.message_id and _M.author.bot:
         user = trojsten.get_member(payload.user_id)
-        if payload.emoji == bot.get_emoji(cn.KSP_EMOJI):
-            await user.add_roles(trojsten.get_role(cn.KSP_ROLE))
-        elif payload.emoji == bot.get_emoji(cn.KMS_EMOJI):
-            await user.add_roles(trojsten.get_role(cn.KMS_ROLE))
-        elif payload.emoji == bot.get_emoji(cn.FKS_EMOJI):
-            await user.add_roles(trojsten.get_role(cn.FKS_ROLE))
-        elif payload.emoji == bot.get_emoji(cn.PRASK_EMOJI):
-            await user.add_roles(trojsten.get_role(cn.PRASK_ROLE))
-        elif payload.emoji == bot.get_emoji(cn.UFO_EMOJI):
-            await user.add_roles(trojsten.get_role(cn.UFO_ROLE))
+        for sem in seminars:
+            if payload.emoji == bot.get_emoji(sem.emoji):
+                await user.add_roles(trojsten.get_role(sem.role))
     elif payload.channel_id == cn.WELCOME_CHANNEL and _C.id == payload.message_id and _C.author.bot:
         user = trojsten.get_member(payload.user_id)
-        white = trojsten.get_role(cn.WHITE_ROLE)
-        orange = trojsten.get_role(cn.ORANGE_ROLE)
-        green = trojsten.get_role(cn.GREEN_ROLE)
-        blue = trojsten.get_role(cn.BLUE_ROLE)
-        if white not in user.roles and orange not in user.roles and green not in user.roles and blue not in user.roles:
-            if payload.emoji.name == cn.WHITE_EMOJI:
-                await user.add_roles(white)
-            elif payload.emoji.name == cn.ORANGE_EMOJI:
-                await user.add_roles(orange)
-            elif payload.emoji.name == cn.GREEN_EMOJI:
-                await user.add_roles(green)
-            elif payload.emoji.name == cn.BLUE_EMOJI:
-                await user.add_roles(blue)
+        if all(color_role not in user.roles for color_role in [x[1] for x in colors]):
+            for role, emoji in colors:
+                if payload.emoji.name == emoji:
+                    await user.add_roles(role)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload):
     if payload.channel_id == cn.WELCOME_CHANNEL and _M.id == payload.message_id and _M.author.bot:
         user = trojsten.get_member(payload.user_id)
-        if payload.emoji == bot.get_emoji(cn.KSP_EMOJI):
-            ksp_r = trojsten.get_role(cn.KSP_ROLE)
-            if ksp_r in user.roles:
-                await user.remove_roles(ksp_r)
-        elif payload.emoji == bot.get_emoji(cn.KMS_EMOJI):
-            kms_r = trojsten.get_role(cn.KMS_ROLE)
-            if kms_r in user.roles:
-                await user.remove_roles(kms_r)
-        elif payload.emoji == bot.get_emoji(cn.FKS_EMOJI):
-            fks_r = trojsten.get_role(cn.FKS_ROLE)
-            if fks_r in user.roles:
-                await user.remove_roles(fks_r)
-        elif payload.emoji == bot.get_emoji(cn.PRASK_EMOJI):
-            prask_r = trojsten.get_role(cn.PRASK_ROLE)
-            if prask_r in user.roles:
-                await user.remove_roles(prask_r)
-        elif payload.emoji == bot.get_emoji(cn.UFO_EMOJI):
-            ufo_r = trojsten.get_role(cn.UFO_ROLE)
-            if ufo_r in user.roles:
-                await user.remove_roles(ufo_r)
+        for sem in seminars:
+            if payload.emoji == bot.get_emoji(sem.emoji) and sem.role in user.roles:
+                await user.remove_roles(sem.role)
     elif payload.channel_id == cn.WELCOME_CHANNEL and _C.id == payload.message_id and _C.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        white = trojsten.get_role(cn.WHITE_ROLE)
-        orange = trojsten.get_role(cn.ORANGE_ROLE)
-        green = trojsten.get_role(cn.GREEN_ROLE)
-        blue = trojsten.get_role(cn.BLUE_ROLE)
-        if payload.emoji.name == cn.WHITE_EMOJI:
-            if white in user.roles:
-                await user.remove_roles(white)
-        elif payload.emoji.name == cn.ORANGE_EMOJI:
-            if orange in user.roles:
-                await user.remove_roles(orange)
-        elif payload.emoji.name == cn.GREEN_EMOJI:
-            if green in user.roles:
-                await user.remove_roles(green)
-        elif payload.emoji.name == cn.BLUE_EMOJI:
-            if blue in user.roles:
-                await user.remove_roles(blue)
+        for role, emoji in colors:
+            if payload.emoji.name == emoji:
+                if role in user.roles:
+                    await user.remove_roles(role)
 
 
 # used for cached data  :
@@ -350,8 +260,7 @@ async def add_warning(user, reason):
     else:
         warnings[user.id][0] += 1
         warnings[user.id].append(reason)
-        log_msg = "{0} got warning because of {1}. They have {2} warnings."
-        logging.info(log_msg.format(user.name, reason, str(warnings[user.id][0])))
+        logging.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
     if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
         try:
             await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
@@ -370,8 +279,8 @@ async def on_reaction_add(react, user):
     global warnings
     global weird_messages
 
-    if react.message.channel == cn.TASKS_CHANNEL and react.emoji == '✅' and react.message.pinned:
-        comm = "{0}new".format(bot.get_prefix(react.message))
+    if react.message.channel == cn.TASKS_CHANNEL and react.emoji == cn.CHECKMARK_EMOJI and react.message.pinned:
+        comm = f"{bot.get_prefix(react.message)}new"
         if react.message.content.startswith(comm) and await react_iter(react.message.author, react.users):
             task_name = react.message.content[5:]
             await react.message.channel.send(st.TASK_COMPLETED.format(react.message.author.name, task_name))
@@ -435,12 +344,12 @@ async def on_reaction_add(react, user):
 # provides usage information for each command
 async def help_command(ctx):
     help_header = st.HELP_HEADER.format(ctx.prefix, ctx.command.name)
-    msg_string = "```{0}\n{1}\n".format(help_header, cn.SEPARATOR_COUNT*cn.SEPARATOR)
+    msg_string = f"```{help_header}\n{cn.SEPARATOR_COUNT*cn.SEPARATOR}\n"
     for usage in st.COMMANDS_HELP[ctx.command.name]:
         if usage.startswith("*"):
-            msg_string += "{0}\n".format(usage)
+            msg_string += f"{usage}\n"
         else:
-            msg_string += " - {0}{1} {2}\n".format(ctx.prefix, ctx.command.name, usage)
+            msg_string += f" - {ctx.prefix}{ctx.command.name} {usage}\n"
     msg_string += "```"
     await ctx.channel.send(msg_string)
 
@@ -448,9 +357,7 @@ async def help_command(ctx):
 # check functions used by commands
 def in_admin_channel():
     def channel_check(ctx):
-        channels = [trojsten.get_channel(cn.DEV_CHANNEL),
-                    trojsten.get_channel(cn.ADMIN_CHANNEL),
-                    trojsten.get_channel(cn.TESTING_CHANNEL)]
+        channels = [trojsten.get_channel(channel) for channel in [cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL]]
         if ctx.channel not in channels:
             raise WrongChannel()
         else:
@@ -489,7 +396,7 @@ async def admin_rule(ctx, *args):
 
     async def complete():
         await welcome_message()
-        await ctx.message.add_reaction(emoji="✅")
+        await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
         logging.info(ctx.message.content)
@@ -521,7 +428,7 @@ async def admin_faq(ctx, *args):
 
     async def complete():
         await welcome_message()
-        await ctx.message.add_reaction(emoji="✅")
+        await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
         if args[0] == "add" and len(args) == 3:
@@ -624,7 +531,7 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    logging.warning("Ignoring exception in command {0}:".format(ctx.command.name))
+    logging.warning(f"Ignoring exception in command {ctx.command.name}:")
     logging.exception("Unhandled exception occured while running command!")
 
 # ####### MAIN LOOP ####### #
@@ -634,7 +541,7 @@ async def on_command_error(ctx, error):
 
 @bot.event
 async def on_command(ctx):
-    logging.info("{0} used command {1} in {2} channel.".format(ctx.message.author, ctx.command.name, ctx.channel.name))
+    logging.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
 
 
 @bot.event
@@ -671,7 +578,7 @@ async def permaloop():
 # region Web
 
 
-class problem:
+class Problem:
     def __init__(self, name, link, points):
         self.name = name
         self.link = link
@@ -681,7 +588,7 @@ class problem:
         logging.info([self.name, self.link, self.points])
 
 
-class person:
+class Person:
     def __init__(self, stat, name, year, school, level, points_bf, points, points_sum):
         self.stat = stat
         self.name = name
@@ -700,11 +607,12 @@ class person:
 class Seminar:
 
     # Set variables
-    def __init__(self, name, outchan, url):
+    def __init__(self, name):
         self.name = name
-        self.m_channel = outchan
+        self.m_channel = cn.SEMINAR_CHANNELS[self.name]
         self.role = cn.SEMINAR_ROLES[self.name]
-        self.url = url
+        self.url = cn.SEMINAR_URLS[self.name]
+        self.emoji = cn.SEMINAR_EMOJIS[self.name]
         self.active = False
         self.year = 0
         self.round = 0
@@ -717,7 +625,7 @@ class Seminar:
     def emoji_name(self):
         textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
         textB = "" if self.name == "ksp" else ("S" if self.name == "kms" else "KS")
-        return "{0}<:{1}:{2}>{3}".format(textA, self.name, cn.SEMINAR_EMOJIS[self.name], textB)
+        return f"{textA}<:{self.name}:{self.emoji}>{textB}"
 
     # # Announcments and voting messages
     async def announcement(self, type):
@@ -750,8 +658,9 @@ class Seminar:
                 if self.result_table.index(key) != self.last_results.index(key):
                     await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
             except Exception:
-                logging.exception("Couldn't notify {0} about change in results table".format(bot.get_user.name))
+                logging.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
 
+    # WILL BE CHANGED
     def get_info(self):
         try:
             responseP = requests.get(self.url+"/ulohy", allow_redirects=True)
@@ -759,17 +668,17 @@ class Seminar:
             sourceCodeP = responseP.content
             sourceCodeR = responseR.content
         except Exception:
-            logging.exception("Connectivity error occured in {0}".format(self.name))
+            logging.exception(f"Connectivity error occured in {self.name}")
         try:
             treeP = lxml.etree.HTML(sourceCodeP)
             treeR = lxml.etree.HTML(sourceCodeR)
         except Exception:
-            logging.exception("Web parsing error occured in {0}".format(self.name))
+            logging.exception(f"Web parsing error occured in {self.name}")
         try:
             task_list = treeP.find(".//table")
             result_list = treeR.find('.//table[@class="table table-hover table-condensed results-table"]')
         except Exception:
-            logging.exception("Web is not compatible {0}".format(self.name))
+            logging.exception(f"Web is not compatible {self.name}")
         try:
             output = []
 
@@ -811,7 +720,7 @@ class Seminar:
                             points_sum = clovek[i][0].text.strip()
                         elif re.match(r"[1-9]", rt):
                             pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
-                    results.append(person(state, name, year, school, level, points_before, pointers, points_sum))
+                    results.append(Person(state, name, year, school, level, points_before, pointers, points_sum))
                 if (self.result_table != results):
                     output.append("new results")
                 self.set_result_table(results)
@@ -827,7 +736,7 @@ class Seminar:
                     pointers = []
                     for pointer in node[2].findall("span"):
                         pointers.append(pointer.text.replace("\xa0", "").split(":")[1])
-                    self.problems.append(problem(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
+                    self.problems.append(Problem(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
                 self.p_length = len(self.problems)
                 get_results()
                 if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0):
@@ -846,7 +755,7 @@ class Seminar:
                 get_results()
                 return output
         except Exception:
-            logging.exception("Pulling error occured in {0}".format(self.name))
+            logging.exception(f"Pulling error occured in {self.name}")
 # endregion
 
 
