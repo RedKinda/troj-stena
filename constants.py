@@ -19,6 +19,7 @@ SEMINAR_URLS = {"kms": KMS_URL,
                 "fks": FKS_URL,
                 "ufo": UFO_URL,
                 "prask": PRASK_URL}
+
 # help commands
 SEPARATOR = "-"
 SEPARATOR_COUNT = 20
@@ -54,7 +55,6 @@ SEMINAR_CHANNELS = {"kms": KMS_CHANNEL,
                     "fks": FKS_CHANNEL,
                     "ufo": UFO_CHANNEL,
                     "prask": PRASK_CHANNEL}
-
 # roles
 TIME_OUT_ROLE = 598815157975515147
 ADMIN_ROLE = 598478860824346624

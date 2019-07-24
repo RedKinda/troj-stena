@@ -2,10 +2,17 @@
 .vs
 *.snl
 *.pyproj
+<<<<<<< HEAD
 .idea
+=======
+>>>>>>> a49c4c0ac3fc77bcc005f75c8bafd3521b0409a3
 
 # enviromental variables file
 .env
 
 # test folder
+<<<<<<< HEAD
 testing_files
+=======
+testing_files
+>>>>>>> a49c4c0ac3fc77bcc005f75c8bafd3521b0409a3
