@@ -21,9 +21,9 @@ DEFAULT_FAQ_CONTENT = [["Som prvýkrát na discorde o čom to tu je?",
                          "keď sa táto rola niekde označí. Farebná rola slúži len na to, aby zmenila farbu tvojho mena. "
                          "Ostatné role vedia priradiť admini. ")],
                        ["Ako je to s prezývkami?",
-                        ("Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "),
-                        ("alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "),
-                        ("a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")]]
+                        ("Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "
+                         "alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "
+                         "a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")]]
 
 ADDITIONAL_CONTENT = "\nAk sa cítiš ako vedúci alebo starec, napíš {0} a bude ti priradená skupina"
 
@@ -61,13 +61,15 @@ FAQ_NOT_FOUND = "FAQ nebolo nájdené"
 
 HELP_HEADER = "Použitie príkazu {0}{1}:"
 COMMANDS_HELP = {
-  'rule': [('add "pravidlo"'),
-           ('remove číslo_pravidla'),
-           ('edit číslo_pravidla "nové pravidlo"')],
-  'faq': [('add "otázka" "odpoveď"'),
-          ('remove číslo_faq_v_poradí'),
-          ('edit číslo_faq_v_poradí "Nová otázka" "Nová odpoveď"'),
-          ('*pri použití edit "-" zachová pôvodnú otázku/odpoveď*')]
+    'rule': [('add "pravidlo"'),
+             ('remove číslo_pravidla'),
+             ('edit číslo_pravidla "nové pravidlo"')],
+    'faq': [('add "otázka" "odpoveď"'),
+            ('remove číslo_faq_v_poradí'),
+            ('edit číslo_faq_v_poradí "Nová otázka" "Nová odpoveď"'),
+            ('*pri použití edit "-" zachová pôvodnú otázku/odpoveď*')],
+    'lead': [('seminar'),
+             ('*seminar sa automaticky doplní ak použieš príkaz v kanáli semináru')]
 }
 
 CMD_NONEXISTENT = "Príkaz nenájdený"

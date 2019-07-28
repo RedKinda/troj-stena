@@ -3,19 +3,22 @@ import logging
 import os
 import pickle
 import re
+import sys
 import time
+import typing
 from datetime import datetime
 
 import discord
-import discord.ext.commands as commands
 import lxml
 import lxml.etree
 import requests
+from discord.ext import commands
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
 
 import constants as cn
 import strings as st
+import helpers as hp
 
 # from aioconsole import ainput
 
@@ -31,13 +34,33 @@ subscribers = {}
 # timeouts = {}
 seminars = []
 udaje = {}
+
+color_msg = None
+white = discord.Role
+orange = discord.Role
+green = discord.Role
+blue = discord.Role
+colors = []
+roles_and_emojis = []
+
+admin = discord.Role
+veduci = discord.Role
+
+# logging
 logscope = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
 logging.basicConfig(level=logscope)
+command_log = logging.getLogger('commands')
+event_log = logging.getLogger('events')
+management_log = logging.getLogger('management')
+web_log = logging.getLogger('web')
+loggers = [command_log, event_log, management_log, web_log]
 
 
 @bot.event
 async def on_ready():
-    global trojsten, warnings, weird_messages, subscribers, seminars, udaje, ready
+    global trojsten, subscribers, seminars, udaje, ready
+    global white, orange, green, blue, colors
+    global admin, veduci
     # global timeouts
 
     ready = True
@@ -48,7 +71,16 @@ async def on_ready():
     if (trojsten is None):
         logging.error("Guild not recognized! Change its ID in constants file")
         await bot.close()
-        exit()
+        sys.exit(1)
+
+    white = trojsten.get_role(cn.WHITE_ROLE)
+    orange = trojsten.get_role(cn.ORANGE_ROLE)
+    green = trojsten.get_role(cn.GREEN_ROLE)
+    blue = trojsten.get_role(cn.BLUE_ROLE)
+    colors = [(white, cn.WHITE_EMOJI), (orange, cn.ORANGE_EMOJI), (green, cn.GREEN_EMOJI), (blue, cn.BLUE_EMOJI)]
+
+    admin = trojsten.get_role(cn.ADMIN_ROLE)
+    veduci = trojsten.get_role(cn.VEDUCI_ROLE)
 
     # loading files
     filehandler = open(cn.SUBSCRIBER_FILE, "wb+")
@@ -66,8 +98,8 @@ async def on_ready():
         reader.close()
     except EOFError:  # if there is no file, create it
         udaje = {
-            "rules": cn.DEFAULT_RULES,
-            "faq": cn.DEFAULT_FAQ_CONTENT
+            "rules": st.DEFAULT_RULES,
+            "faq": st.DEFAULT_FAQ_CONTENT
         }
         pickle.dump(udaje, filehandler)
     filehandler = open(cn.MAIN_DATA_FILE, "wb+")
@@ -90,6 +122,7 @@ async def on_ready():
     # setup classes
     for sem in seminars:
         sem.m_channel = bot.get_channel(sem.m_channel)
+        roles_and_emojis.append((trojsten.get_role(sem.role), bot.get_emoji(sem.emoji)))
 
     # MSGS #
     await welcome_message()
@@ -101,108 +134,80 @@ async def on_ready():
 # ###### MESSAGE HANDLING #######
 # ###############################
 
-# region Messages
 
+# region Messages
 async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
     for i in range(len(udaje["rules"])):
         _rules += f"{i+1}. {udaje['rules'][i]}\n"
     for i in udaje["faq"]:
-        _faq += f"- {i[0]}\n{i[1]}\n"
+        _faq += f"- *{i[0]}*\n{i[1]}\n"
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
-    found = False
-    logging.info("searching for welcome message ...")
-    async for message in general.history():
-        if message.author.bot and message.content.startswith(st.WELCOME_HEADER):
-            logging.info("Found")
-            found = True
-            if (message.content != _message):
-                await message.edit(content=_message)
-                logging.info("Changed")
-                pickle.dump(udaje, open(cn.CONTENT_FILE, "wb"))
-                logging.info("Saved -> Checking")
-                if pickle.load(open(cn.CONTENT_FILE, "rb")) == udaje:
-                    logging.info("Check - OK")
-            break
-    if not found:
-        logging.info("Generating new")
-        await general.send(_message)
+    management_log.info("searching for welcome message ...")
+    message = await hp.find_message(general, st.WELCOME_HEADER)
+    if message is not None:
+        if (message.content != _message):
+            await message.edit(content=_message)
+            management_log.info("Changed")
+            pickle.dump(udaje, open(cn.CONTENT_FILE, "wb"))
+        management_log.info("Welcome msg stat - OK")
     else:
-        logging.info("Welcome msg stat - OK")
+        management_log.info("Generating new")
+        await general.send(_message)
 
 
-_M = None
+role_msg = None
 
 
 async def role_message():
-    global _M
+    global role_msg
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
-    found = False
     _message = st.ROLE_MESSAGE
-    logging.info("Searching for role message ...")
-    async for message in general.history():
-        if message.author.bot and message.content == _message:
-            logging.info("Found")
-            _M = message
-            found = True
-            break
-
-    if not found:
-        logging.info("Generating new")
+    management_log.info("Searching for role message ...")
+    role_msg = await hp.find_message(general, _message)
+    if role_msg is not None:
+        management_log.info("React msg stat - OK")
+        for react in role_msg.reactions:
+            async for reactor in react.users():
+                for role, emoji in roles_and_emojis:
+                    if react.emoji == emoji and role not in reactor.roles:
+                        logging.info(f"Added role {role.name} to {reactor.name}")
+                        await reactor.add_roles(role)
+        management_log.info("React -> Role sync - OK")
+    else:
+        management_log.info("Generating new")
         msg = await general.send(_message)
-        _M = msg
+        role_msg = msg
         for sem in seminars:
             await msg.add_reaction(bot.get_emoji(sem.emoji))
-    else:
-        logging.info("React msg stat - OK")
-        for react in message.reactions:
-            async for reactor in react.users():
-                for sem in seminars:
-                    if react.emoji == bot.get_emoji(sem.emoji) and trojsten.get_role(sem.role) not in reactor.roles:
-                        await reactor.add_roles(sem.role)
-                        logging.info(f"Added role {trojsten.get_role(sem.role).name} to {reactor.name}")
-        logging.info("React -> Role sync - OK")
 
-
-_C = None
-white = trojsten.get_role(cn.WHITE_ROLE)
-orange = trojsten.get_role(cn.ORANGE_ROLE)
-green = trojsten.get_role(cn.GREEN_ROLE)
-blue = trojsten.get_role(cn.BLUE_ROLE)
-colors = [(white, cn.WHITE_EMOJI), (orange, cn.ORANGE_EMOJI), (green, cn.GREEN_EMOJI), (blue, cn.BLUE_EMOJI)]
+color_msg = None
 
 
 async def color_message():
-    global _C
+    global color_msg
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
-    found = False
     _message = st.COLOR_MESSAGE
-    logging.info("Searching for color message ...")
-    async for message in general.history():
-        if message.author.bot and message.content == _message:
-            logging.info("Found")
-            _C = message
-            found = True
-            break
-
-    if not found:
-        logging.info("Generating new ...")
+    management_log.info("Searching for color message ...")
+    color_msg = await hp.find_message(general, _message)
+    if color_msg is not None:
+        management_log.info("Color msg stat - OK")
+        for react in color_msg.reactions:
+            async for reactor in react.users():
+                for role, emoji in colors:
+                    if role not in reactor.roles and react.emoji == emoji:
+                        event_log.info(f"Added role {role.name} to {reactor.name}")
+                        await reactor.add_roles(role)
+        management_log.info("React -> Role sync - OK")
+    else:
+        management_log.info("Generating new ...")
         msg = await general.send(_message)
-        _C = msg
+        color_msg = msg
         reactions = [x[1] for x in colors]
         for emoji in reactions:
             await msg.add_reaction(emoji=emoji)
-    else:
-        logging.info("Color msg stat - OK")
-        for react in message.reactions:
-            async for reactor in react.users():
-                for role, emoji in colors:
-                    if role in reactor.roles and react.emoji == emoji:
-                        await reactor.add_roles(emoji)
-                        logging.info(f"Added role {trojsten.get_role(role).name} to {reactor.name}")
-        logging.info("React -> Role sync - OK")
 
 # endregion
 
@@ -217,30 +222,33 @@ async def color_message():
 
 @bot.event
 async def on_raw_reaction_add(payload):
-    if payload.channel_id == cn.WELCOME_CHANNEL and _M.id == payload.message_id and _M.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        for sem in seminars:
-            if payload.emoji == bot.get_emoji(sem.emoji):
-                await user.add_roles(trojsten.get_role(sem.role))
-    elif payload.channel_id == cn.WELCOME_CHANNEL and _C.id == payload.message_id and _C.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        if all(color_role not in user.roles for color_role in [x[1] for x in colors]):
+    user = trojsten.get_member(payload.user_id)
+    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id and not user.bot:
+        for role, emoji in roles_and_emojis:
+            if payload.emoji == emoji:
+                event_log.info(f"User {user.name} added reaction on {role.name}")
+                await user.add_roles(role)
+    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id and not user.bot:
+        if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
             for role, emoji in colors:
                 if payload.emoji.name == emoji:
+                    event_log.info(f"User {user.name} added reaction on {role.name}")
                     await user.add_roles(role)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload):
-    if payload.channel_id == cn.WELCOME_CHANNEL and _M.id == payload.message_id and _M.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        for sem in seminars:
-            if payload.emoji == bot.get_emoji(sem.emoji) and sem.role in user.roles:
-                await user.remove_roles(sem.role)
-    elif payload.channel_id == cn.WELCOME_CHANNEL and _C.id == payload.message_id and _C.author.bot:
+    user = trojsten.get_member(payload.user_id)
+    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id:
+        for role, emoji in roles_and_emojis:
+            if payload.emoji == emoji and (role in user.roles):
+                event_log.info(f"User {user.name} removed reaction on {role.name}")
+                await user.remove_roles(role)
+    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id:
         for role, emoji in colors:
             if payload.emoji.name == emoji:
                 if role in user.roles:
+                    event_log.info(f"User {user.name} removed reaction on {role.name}")
                     await user.remove_roles(role)
 
 
@@ -260,7 +268,7 @@ async def add_warning(user, reason):
     else:
         warnings[user.id][0] += 1
         warnings[user.id].append(reason)
-        logging.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
+        event_log.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
     if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
         try:
             await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
@@ -268,7 +276,7 @@ async def add_warning(user, reason):
         except Exception:
             await user.dm_channel.send(st.BAN_ERROR_U)
             await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
-            logging.exception("Error while issuing ban")
+            event_log.exception("Error while issuing ban")
     else:
         await user.dm_channel.send(st.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
 
@@ -354,10 +362,23 @@ async def help_command(ctx):
     await ctx.channel.send(msg_string)
 
 
+# define error classes
+class WrongChannel(commands.CommandError):
+    pass
+
+
+class RuleNotFound(commands.CommandError):
+    pass
+
+
+class FaqNotFound(commands.CommandError):
+    pass
+
+
 # check functions used by commands
-def in_admin_channel():
+def in_channel(*args):
     def channel_check(ctx):
-        channels = [trojsten.get_channel(channel) for channel in [cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL]]
+        channels = [trojsten.get_channel(channel) for channel in args]
         if ctx.channel not in channels:
             raise WrongChannel()
         else:
@@ -366,40 +387,38 @@ def in_admin_channel():
 
 # COMMANDS ::
 
-
 # wip command
 @bot.command(enabled=False)
-async def new(ctx):
-    if ctx.channel == trojsten.get_channel(cn.TASKS_CHANNEL) or ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
-        if ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
-            tchannel = bot.get_channel(cn.TASKS_CHANNEL)
-        await tchannel.send(st.TASK_SUBMITED.format(ctx.author.name, cn.TASK_DONE_EMOJI))
-        await ctx.pin()
+@in_channel(cn.TASKS_CHANNEL, cn.ADMIN_CHANNEL)
+async def new(self, ctx):
+    if ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
+        tchannel = self.bot.get_channel(cn.TASKS_CHANNEL)
+    await tchannel.send(st.TASK_SUBMITED.format(ctx.author.name, cn.TASK_DONE_EMOJI))
+    await ctx.pin()
 
 
-@bot.command(name='purge')
+@bot.command(name='purge', enabled=False)
+@commands.has_role(cn.ADMIN_ROLE)
 async def admin_purge(ctx, channel):
-    # purges server
-    if ctx.author.role == trojsten.get_role(cn.ADMIN_ROLE):
-        if channel is not None:
-            await trojsten.get_channel(int(channel)).purge(limit=None)
-        else:
-            await ctx.channel.send(st.PURGE_EMPTY_CHANNEL)
+    # purges channel
+    if channel is not None:
+        await trojsten.get_channel(int(channel)).purge(limit=None)
+    else:
+        await ctx.channel.send(st.PURGE_EMPTY_CHANNEL)
 
 
 @bot.command(name='rule')
-@in_admin_channel()
 @commands.guild_only()
+@in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
 @commands.has_any_role(cn.ADMIN_ROLE, cn.VEDUCI_ROLE)
 async def admin_rule(ctx, *args):
-    global udaje
 
     async def complete():
         await welcome_message()
         await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
-        logging.info(ctx.message.content)
+        command_log.info(ctx.message.content)
         if args[0] == "add" and len(args) == 2:
             udaje["rules"].append(args[1])
             await complete()
@@ -420,11 +439,10 @@ async def admin_rule(ctx, *args):
 
 
 @bot.command(name='faq')
-@in_admin_channel()
 @commands.guild_only()
+@in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
 @commands.has_any_role(cn.ADMIN_ROLE, cn.VEDUCI_ROLE)
 async def admin_faq(ctx, *args):
-    global udaje
 
     async def complete():
         await welcome_message()
@@ -456,7 +474,6 @@ async def admin_faq(ctx, *args):
 @bot.command(name='subscribe', aliases=['sub'], enabled=False)
 @commands.dm_only()
 async def subscribe(ctx, arg):
-    global subscribers
     if arg == "list":
         await ctx.channel.send(st.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
     else:
@@ -464,26 +481,22 @@ async def subscribe(ctx, arg):
         await ctx.channel.send(st.SUB_RESPONSE.format(arg))
 
 
-# define error classes
-class WrongChannel(commands.CommandError):
-    def __init__(self):
-        return super().__init__()
-
-
-class RuleNotFound(commands.CommandError):
-    def __init__(self):
-        return super().__init__()
-
-
-class FaqNotFound(commands.CommandError):
-    def __init__(self):
-        return super().__init__()
+@bot.command(name='lead')
+async def lead(ctx, seminar: typing.Optional[str]):
+    for sem in seminars:
+        if sem.name == seminar or sem.name == ctx.channel.name:
+            msg = (f"👑 {sem.result_table[0].name}\n"
+                   f"  2.   {sem.result_table[1].name}\n"
+                   f"  3.   {sem.result_table[2].name}\n")
+            await ctx.channel.send(msg)
+            return
+        raise commands.UserInputError
 
 
 @bot.event
 async def on_command_error(ctx, error):
 
-    logging.info("Command ended with error.")
+    command_log.info("Command ended with error.")
 
     # if command has local error handler, return
     if hasattr(ctx.command, "on_error"):
@@ -531,25 +544,23 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    logging.warning(f"Ignoring exception in command {ctx.command.name}:")
-    logging.exception("Unhandled exception occured while running command!")
-
-# ####### MAIN LOOP ####### #
-
-# Command ebug events
+    command_log.warning(f"Ignoring exception in command {ctx.command.name}:")
+    command_log.exception("Unhandled exception occured while running command!")
 
 
+# Command debug events
 @bot.event
 async def on_command(ctx):
-    logging.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
+    event_log.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
 
 
 @bot.event
 async def on_command_completion(ctx):
-    logging.debug("Execution of command was succesfull.")
+    event_log.debug("Command executed succesfully.")
 # endregion
 
 
+# ####### MAIN LOOP ####### #
 async def permaloop():
     # global last_update
     last_update = 0
@@ -560,7 +571,7 @@ async def permaloop():
             for s in seminars:
                 res = s.get_info()
                 for change in res:
-                    if change == "new problems":
+                    if change == "new tasks":
                         s.newroundmessage()
                         s.voting("release")
                     elif change == "new solutions":
@@ -578,14 +589,14 @@ async def permaloop():
 # region Web
 
 
-class Problem:
+class Task:
     def __init__(self, name, link, points):
         self.name = name
         self.link = link
         self.points = points
 
     def print_contents(self):
-        logging.info([self.name, self.link, self.points])
+        web_log.debug([self.name, self.link, self.points])
 
 
 class Person:
@@ -600,7 +611,7 @@ class Person:
         self.points_sum = points_sum
 
     def print_contents(self):
-        logging.info([self.stat, self.name, self.year, self.school,
+        web_log.debug([self.stat, self.name, self.year, self.school,
                       self.level, self.points_bf, self.points, self.points_sum])
 
 
@@ -617,10 +628,14 @@ class Seminar:
         self.year = 0
         self.round = 0
         self.part = 0
-        self.problems = []
+        self.tasks = []
         self.result_table = []
-        self.get_info()
-        self.p_length = len(self.problems)
+        self.get_tasks()
+        self.get_results()
+        self.p_length = len(self.tasks)
+        if (self.result_table is not None):
+            for res in self.result_table:
+                res.print_contents()
 
     def emoji_name(self):
         textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
@@ -644,7 +659,7 @@ class Seminar:
             await vote_channel.send(self.emoji_name())
             await vote_channel.send(st.VOTE_MESSAGE)
             for n in range(self.p_length):
-                await vote_channel.send(str(n+1) + ". " + self.problems[n].name)
+                await vote_channel.send(str(n+1) + ". " + self.tasks[n].name)
 
     # # user notify system ##
     def set_result_table(self, dict):
@@ -658,104 +673,122 @@ class Seminar:
                 if self.result_table.index(key) != self.last_results.index(key):
                     await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
             except Exception:
-                logging.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
+                event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
 
-    # WILL BE CHANGED
-    def get_info(self):
+    def get_person(self, clovek, row_type):
+        pointers = []
+        level = None
+        for i in range(len(clovek)):
+            rt = str(row_type[i].text).strip()
+            if rt is None or rt == "":
+                rt = str(row_type[i][0].text).strip()
+            if "#" in rt:
+                cLass = clovek[i].find(".//span").attrib["class"]
+                class_to_state = {
+                    'glyphicon-asterisk': 'new',
+                    'glyphicon-chevron-down': 'dropped',
+                    'glyphicon-chevron-up': 'advanced',
+                    'glyphicon-pushpin': 'pinned'
+                }
+                state = "none"
+                for icon in class_to_state:
+                    if icon in cLass:
+                        state = class_to_state[icon]
+            elif "Meno" in rt:
+                name = clovek[i].text.strip()
+            elif "kola" in rt:
+                school = clovek[i][0].text.strip()
+            elif "R" in rt:
+                year = clovek[i].text.strip()
+            elif "Level" in rt or "K" in rt:
+                level = clovek[i][0].text.strip()
+            elif "P" in rt:
+                points_before = clovek[i][0].text.strip()
+            elif "∑" in rt:
+                points_sum = clovek[i][0].text.strip()
+            elif re.match(r"[1-9]", rt):
+                pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
+        return Person(state, name, year, school, level, points_before, pointers, points_sum)
+
+    def get_results(self):
         try:
-            responseP = requests.get(self.url+"/ulohy", allow_redirects=True)
-            responseR = requests.get(self.url+"/vysledky/", allow_redirects=True)
-            sourceCodeP = responseP.content
-            sourceCodeR = responseR.content
+            response = requests.get(self.url+"/vysledky/", allow_redirects=True)
+            sourceCode = response.content
         except Exception:
-            logging.exception(f"Connectivity error occured in {self.name}")
+            web_log.exception(f"Connectivity error occured in {self.name}")
         try:
-            treeP = lxml.etree.HTML(sourceCodeP)
-            treeR = lxml.etree.HTML(sourceCodeR)
+            tree = lxml.etree.HTML(sourceCode)
         except Exception:
-            logging.exception(f"Web parsing error occured in {self.name}")
+            web_log.exception(f"Web parsing error occured in {self.name}")
         try:
-            task_list = treeP.find(".//table")
-            result_list = treeR.find('.//table[@class="table table-hover table-condensed results-table"]')
+            result_list = tree.find('.//table[@class="table table-hover table-condensed results-table"]')
         except Exception:
-            logging.exception(f"Web is not compatible {self.name}")
+            web_log.exception(f"Web is not compatible {self.name}")
         try:
             output = []
+            rows = result_list.findall(".//tr")
+            row_type = rows[0].findall(".//th")
+            results = []
+            for per in rows[1:]:
+                clovek = per.findall(".//td")
+                results.append(self.get_person(clovek, row_type))
+            if (self.result_table != results):
+                output.append("new results")
+            self.set_result_table(results)
+            web_log.info(f"Succesfully loaded results for seminar {self.name}")
+            return output
+        except Exception:
+            web_log.exception(f"Pulling error occured in {self.name}")
 
-            def get_results():
-                rows = result_list.findall(".//tr")
-                row_type = rows[0].findall(".//th")
-                results = []
-                for per in rows[1:]:
-                    clovek = per.findall(".//td")
-                    pointers = []
-                    level = None
-                    for i in range(len(clovek)):
-                        rt = str(row_type[i].text).strip()
-                        if rt is None or rt == "":
-                            rt = str(row_type[i][0].text).strip()
-                        if "#" in rt:
-                            cLass = clovek[i].find(".//span").attrib["class"]
-                            if "glyphicon-asterisk" in cLass:
-                                state = "new"
-                            elif "glyphicon-chevron-down" in cLass:
-                                state = "dropped"
-                            elif "glyphicon-chevron-up" in cLass:
-                                state = "advanced"
-                            elif "glyphicon-pushpin" in cLass:
-                                state = "pinned"
-                            else:
-                                state = "none"
-                        elif "Meno" in rt:
-                            name = clovek[i].text.strip()
-                        elif "kola" in rt:
-                            school = clovek[i][0].text.strip()
-                        elif "R" in rt:
-                            year = clovek[i].text.strip()
-                        elif "Level" in rt or "K" in rt:
-                            level = clovek[i][0].text.strip()
-                        elif "P" in rt:
-                            points_before = clovek[i][0].text.strip()
-                        elif "∑" in rt:
-                            points_sum = clovek[i][0].text.strip()
-                        elif re.match(r"[1-9]", rt):
-                            pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
-                    results.append(Person(state, name, year, school, level, points_before, pointers, points_sum))
-                if (self.result_table != results):
-                    output.append("new results")
-                self.set_result_table(results)
-            if("task-list" in task_list.attrib["class"]):
+    def get_tasks(self):
+        try:
+            response = requests.get(self.url+"/ulohy/", allow_redirects=True)
+            sourceCode = response.content
+        except Exception:
+            web_log.exception(f"Connectivity error occured in {self.name}")
+        try:
+            tree = lxml.etree.HTML(sourceCode)
+        except Exception:
+            web_log.exception(f"Web parsing error occured in {self.name}")
+        try:
+            task_list = tree.find(".//table")
+        except Exception:
+            web_log.exception(f"Web is not compatible {self.name}")
+        try:
+            output = []
+            if "task-list" in task_list.attrib["class"]:
                 self.active = True
-                round_info = treeP.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
-                # check for changes
+                round_info = tree.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
+                # set info
                 round = round_info[0].split(".")[0]
                 part = round_info[1].split(".")[0]
                 year = round_info[2].split(".")[0]
-                self.problems = []
+                self.tasks = []
                 for node in task_list.findall("tr"):
                     pointers = []
                     for pointer in node[2].findall("span"):
                         pointers.append(pointer.text.replace("\xa0", "").split(":")[1])
-                    self.problems.append(Problem(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
-                self.p_length = len(self.problems)
-                get_results()
-                if ((self.round != round or self.part != part or self.year != year) and len(self.problems) > 0):
-                    output.append("new problems")
+                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
+                self.p_length = len(self.tasks)
+                # check for changes
+                if (self.round != round or self.part != part or self.year != year) and len(self.tasks) > 0:
+                    output.append("new tasks")
                 self.round = round
                 self.part = part
                 self.year = year
                 # self.remaining = treeP.find(".//div[@class='progress-bar']").text
-                self.r_datetime = datetime.strptime(treeP.find(".//em").text[12:], "%d. %B %Y %H:%M")
+                self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], "%d. %B %Y %H:%M")
+                web_log.info(f"Succesfully loaded tasks for seminar {self.name}")
                 return output
             else:
-                if (self.active is False):
+                if self.active is False:
                     output.append("end of round")
                 self.active = False
                 self.remaining = "Round not active"
-                get_results()
+                web_log.info(f"Tasks for {self.name} are not available")
                 return output
         except Exception:
-            logging.exception(f"Pulling error occured in {self.name}")
+            web_log.exception(f"Pulling error occured in {self.name}")
 # endregion
 
 

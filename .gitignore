@@ -1,8 +1,11 @@
-# visual studio files
+# editor files
 .vs
+.vscode
 *.snl
 *.pyproj
 .idea
+*.code-workspace
+__pycache__
 
 # enviromental variables file
 .env
