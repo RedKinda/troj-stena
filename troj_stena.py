@@ -1,500 +1,577 @@
-import discord
-import time
 import asyncio
-import requests
-import re
+import logging
+import os
 import pickle
+import re
+import sys
+import time
+import typing
+from datetime import datetime
+
+import discord
 import lxml
 import lxml.etree
-from datetime import datetime
-import shlex
+import requests
+from discord.ext import commands
+from discord.ext.commands import Bot
+from dotenv import load_dotenv
+
+import constants as cn
+import strings as st
+import helpers as hp
 
 # from aioconsole import ainput
 
-commands = asyncio.Queue()
-
+bot = Bot(command_prefix="$", status=discord.Status.online, activity=discord.Game(name=cn.BOT_MSG))
+trojsten = discord.Guild
 ready = False
-client = discord.Client()
+load_dotenv()
+
+# Set global variables
+warnings = {}
+weird_messages = {}
+subscribers = {}
+# timeouts = {}
+seminars = []
+udaje = {}
+
+color_msg = None
+white = discord.Role
+orange = discord.Role
+green = discord.Role
+blue = discord.Role
+colors = []
+roles_and_emojis = []
+
+admin = discord.Role
+veduci = discord.Role
+
+# logging
+logscope = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
+logging.basicConfig(level=logscope)
+command_log = logging.getLogger('commands')
+event_log = logging.getLogger('events')
+management_log = logging.getLogger('management')
+web_log = logging.getLogger('web')
+loggers = [command_log, event_log, management_log, web_log]
 
 
-def log(message, type='info'):
-    types = {
-        'info': '\033[0m',
-        'ok': '\033[92m',
-        'proces': '\033[95m',
-        'error': '\033[1;[91m',
-        'warning': ''
-    }
-    try:
-        print('{0}{1}{2}'.format(types[type], message, types['info']))
-    except:
-        print("{0}Type not found.{1}".format(types['error'], types['info']))
-
-
-id_bank = {"botrole": 598502023079657483,
-           "zaujimave-ulohy": 598522778743734342,
-           "timeOut role": 598815157975515147,
-           "misko emoji": 598820789168373778,
-           "solved emoji": 598782166121316363,
-           "cheatalert emoji": 599242099207962635,
-           "moderating channel": 599249382038044703,
-           "questionable emoji": 599248755186728966,
-           "thup emoji": 598508913372954634,
-           "thdown emoji": 598509040540057600,
-           "badin emoji": 598483292034957312,
-           "ksprole": 600750067929841736,
-           "kspemoji": 600745214080188448,
-           "kmsrole": 600750035801604184,
-           "kmsemoji": 600745723650113571,
-           "fksrole": 600750477289848836,
-           "fksemoji": 600745115258060800,
-           "praskrole": 600750779447509002,
-           "praskemoji": 600744451861774356,
-           "uforole": 600750981483069458,
-           "ufoemoji": 600744527631745026,
-           "MvKal": 332935845004705793,
-           "voting channel": 600688938562093058,
-           "welcome channel": 600944280650907678,
-           "dev channel": 598490170236338176,
-           "adminrole": 598478860824346624,
-           "veduckorole": 598517418968743957,
-           "admin channel": 600384787433259010,
-           "whiterole": 601106902398533632,
-           "orangerole": 601098919275135007,
-           "greenrole": 601099061696659456,
-           "bluerole": 601098701536231434,
-           "testing channel": 601160389736136737
-           }
-
-
-@client.event
+@bot.event
 async def on_ready():
-    global warnings
-    global weird_messages
-    global botrole
-    global trojsten
-    global timeouts
-    global ready
-    global seminars
-    global filehandler
-    global subscribes
-    global udaje
+    global trojsten, subscribers, seminars, udaje, ready
+    global white, orange, green, blue, colors
+    global admin, veduci
+    # global timeouts
 
     ready = True
-    print("\033[1m I am ready as", client.user.name + "#" + str(client.user.discriminator))
-    trojsten = client.get_guild(598476317758849024)  # trojsten server
-    botrole = trojsten.get_role(id_bank["botrole"])
-    warnings = {}
-    subscribes = {}
-    timeouts = {}
-    weird_messages = {}
-    filehandler = open('information.dat', 'wb+')
-    try:  # loading seminarsi
-        reader = open('information.dat', 'rb')
+
+    logging.info(f"Bot loaded as {bot.user.name}#{str(bot.user.discriminator)}")
+
+    trojsten = bot.get_guild(cn.GUILD_ID)
+    if (trojsten is None):
+        logging.error("Guild not recognized! Change its ID in constants file")
+        await bot.close()
+        sys.exit(1)
+
+    white = trojsten.get_role(cn.WHITE_ROLE)
+    orange = trojsten.get_role(cn.ORANGE_ROLE)
+    green = trojsten.get_role(cn.GREEN_ROLE)
+    blue = trojsten.get_role(cn.BLUE_ROLE)
+    colors = [(white, cn.WHITE_EMOJI), (orange, cn.ORANGE_EMOJI), (green, cn.GREEN_EMOJI), (blue, cn.BLUE_EMOJI)]
+
+    admin = trojsten.get_role(cn.ADMIN_ROLE)
+    veduci = trojsten.get_role(cn.VEDUCI_ROLE)
+
+    # loading files
+    filehandler = open(cn.SUBSCRIBER_FILE, "wb+")
+    try:			# load last saved subscriber list
+        reader = open(cn.SUBSCRIBER_FILE, "rb")
+        subscribers = pickle.load(reader)
+        reader.close()
+    except Exception:
+        logging.warning("Loading subscriber file failed")
+    filehandler.close()
+    filehandler = open(cn.CONTENT_FILE, "wb+")
+    try:			# loading data
+        reader = open(cn.CONTENT_FILE, "rb")
+        udaje = pickle.load(reader)
+        reader.close()
+    except EOFError:  # if there is no file, create it
+        udaje = {
+            "rules": st.DEFAULT_RULES,
+            "faq": st.DEFAULT_FAQ_CONTENT
+        }
+        pickle.dump(udaje, filehandler)
+    filehandler = open(cn.MAIN_DATA_FILE, "wb+")
+    try:			 # loading
+        reader = open(cn.MAIN_DATA_FILE, "rb")
         seminars = pickle.load(reader)
         reader.close()
     except EOFError:  # if there is no file, create them
-        seminars = [Seminar("kms", 598481957285920778, "https://kms.sk"),
-                    Seminar("ksp", 598481977938542603, "https://ksp.sk"),
-                    Seminar("fks", 598482014324129803, "https://fks.sk"),
-                    Seminar("ufo", 598482065708548126, "https://ufo.fks.sk"),
-                    Seminar("prask", 598482110616961054, "https://prask.ksp.sk")]
+        seminars = [Seminar("kms"),
+                    Seminar("fks"),
+                    Seminar("ksp"),
+                    Seminar("ufo"),
+                    Seminar("prask")]
+
         # Debug web gathering --> print first contestant in result table for seminar x
         # print(seminars[1].result_table[0].print_contents())
         pickle.dump(seminars, filehandler)
-    for sem in seminars:
-        sem.m_channel = client.get_channel(sem.m_channel)
-    # for s in seminars:
-    #	await s.voting("release")
-    udaje = {'pravidla': [
-        "Správame sa slušne, rešpektujeme ostatných, nespamujeme, nepoužívame zbytočne ‘@ everyone’ a všetko čo by rozum napovedal.",
-        "Rešpektujeme pokyny adminov.",
-        "O riešeniach úloh je povolené sa baviť až keď sú zverejnené vzoráky."],
+    filehandler.close()
 
-        'faq': [["Som prvýkrát na discorde o čom to tu je?",
-                 "Skús pohľadať na internete, krátke: <https://www.youtube.com/watch?v=aYSQB0fUzv0>\nDlhšie: <https://www.youtube.com/watch?v=le_CE--Mnvs>"]]}
-    f = open('content.dat', 'wb+')
-    try:  # loading seminarsi
-        reader = open('content.dat', 'rb')
-        udaje = pickle.load(reader)
-        reader.close()
-    except EOFError:  # if there is no file, create them
-        pickle.dump(udaje, f)
+    # setup classes
+    for sem in seminars:
+        sem.m_channel = bot.get_channel(sem.m_channel)
+        roles_and_emojis.append((trojsten.get_role(sem.role), bot.get_emoji(sem.emoji)))
+
+    # MSGS #
     await welcome_message()
     await role_message()
     await color_message()
-    await commandloop()
 
 
-def save():
-    global filehandler
-    global seminars
-    pickle.dump(seminars, filehandler)
+# ###############################
+# ###### MESSAGE HANDLING #######
+# ###############################
 
 
+# region Messages
 async def welcome_message():
-    general = trojsten.get_channel(id_bank["welcome channel"])
-    _pravidla = ""
-    _faq = ""
-    for i in range(len(udaje['pravidla'])):
-        _pravidla += "{0}. {1}\n".format(i + 1, udaje['pravidla'][i])
-    for i in udaje['faq']:
-        _faq += "- {0}\n{1}\n".format(i[0], i[1])
-    _message = """**Vitaj na oficiálnom Discord serveri Trojstenu!**\n\nToto je miesto kde sa stretávajú účastníci a vedúci aby sa zabavili. Ak poznáš niekoho, kto by tu tiež mal byť, neváhaj ho pozvať: https://discord.gg/F9HZP9b\n\nPravidlá:\n{0}\nFaq:\n{1}""".format(
-        _pravidla, _faq)
-    found = False
-    log("searching for welcome message ...", 'proces')
-    async for message in general.history():
-        if message.author.bot and message.content.startswith("**Vitaj na oficiálnom Discord serveri Trojstenu!**"):
-            log("Found", 'ok')
-            found = True
-            if (message.content != _message):
-                await message.edit(content=_message)
-                log("Changed", 'ok')
-                pickle.dump(udaje, open('content.dat', 'wb'))
-                log("Saved", 'ok')
-            break
-    if not found:
-        log("Generating new", 'proces')
-        msg = await general.send(_message)
+    general = trojsten.get_channel(cn.WELCOME_CHANNEL)
+    _rules, _faq = "", ""
+    for i in range(len(udaje["rules"])):
+        _rules += f"{i+1}. {udaje['rules'][i]}\n"
+    for i in udaje["faq"]:
+        _faq += f"- *{i[0]}*\n{i[1]}\n"
+    add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
+    _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
+    management_log.info("searching for welcome message ...")
+    message = await hp.find_message(general, st.WELCOME_HEADER)
+    if message is not None:
+        if (message.content != _message):
+            await message.edit(content=_message)
+            management_log.info("Changed")
+            pickle.dump(udaje, open(cn.CONTENT_FILE, "wb"))
+        management_log.info("Welcome msg stat - OK")
     else:
-        log("Welcome msg stat - OK", 'ok')
+        management_log.info("Generating new")
+        await general.send(_message)
 
 
-_M = None
+role_msg = None
 
 
 async def role_message():
-    global _M
-    general = trojsten.get_channel(id_bank["welcome channel"])
-    found = False
-    _message = "Nižšie si môžeš vybrať zo seminárov, ktoré riešiš alebo ťa zaujímajú:"
-    log("Searching for role message ...", 'proces')
-    async for message in general.history():
-        if message.author.bot and message.content == _message:
-            log("Found", 'ok')
-            _M = message
-            found = True
-            break
-
-    if not found:
-        log("Generating new", 'proces')
-        msg = await general.send(_message)
-        _M = msg
-        await msg.add_reaction(client.get_emoji(id_bank['kmsemoji']))
-        await msg.add_reaction(client.get_emoji(id_bank['fksemoji']))
-        await msg.add_reaction(client.get_emoji(id_bank['kspemoji']))
-        await msg.add_reaction(client.get_emoji(id_bank['ufoemoji']))
-        await msg.add_reaction(client.get_emoji(id_bank['praskemoji']))
-    else:
-        log("React msg stat - OK", 'ok')
-        for react in message.reactions:
+    global role_msg
+    general = trojsten.get_channel(cn.WELCOME_CHANNEL)
+    _message = st.ROLE_MESSAGE
+    management_log.info("Searching for role message ...")
+    role_msg = await hp.find_message(general, _message)
+    if role_msg is not None:
+        management_log.info("React msg stat - OK")
+        for react in role_msg.reactions:
             async for reactor in react.users():
-                if react.emoji == client.get_emoji(id_bank["kspemoji"]):
-                    ksp_r = trojsten.get_role(id_bank["ksprole"])
-                    if ksp_r not in reactor.roles:
-                        await reactor.add_roles(ksp_r)
-                elif react.emoji == client.get_emoji(id_bank["kmsemoji"]):
-                    kms_r = trojsten.get_role(id_bank["kmsrole"])
-                    if kms_r not in reactor.roles:
-                        await reactor.add_roles(kms_r)
-                elif react.emoji == client.get_emoji(id_bank["fksemoji"]):
-                    fks_r = trojsten.get_role(id_bank["fksrole"])
-                    if fks_r not in reactor.roles:
-                        await reactor.add_roles(fks_r)
-                elif react.emoji == client.get_emoji(id_bank["praskemoji"]):
-                    prask_r = trojsten.get_role(id_bank["praskrole"])
-                    if prask_r not in reactor.roles:
-                        await reactor.add_roles(prask_r)
-                elif react.emoji == client.get_emoji(id_bank["ufoemoji"]):
-                    ufo_r = trojsten.get_role(id_bank["uforole"])
-                    if ufo_r not in reactor.roles:
-                        await reactor.add_roles(ufo_r)
-        log("React <-> Role sync - OK", 'ok')
+                for role, emoji in roles_and_emojis:
+                    if react.emoji == emoji and role not in reactor.roles:
+                        logging.info(f"Added role {role.name} to {reactor.name}")
+                        await reactor.add_roles(role)
+        management_log.info("React -> Role sync - OK")
+    else:
+        management_log.info("Generating new")
+        msg = await general.send(_message)
+        role_msg = msg
+        for sem in seminars:
+            await msg.add_reaction(bot.get_emoji(sem.emoji))
 
-
-_C = None
+color_msg = None
 
 
 async def color_message():
-    global _C
-    general = trojsten.get_channel(id_bank["welcome channel"])
-    found = False
-    _message = "A farbu tvojho mena:"
-    log("Searching for color message ...", 'proces')
-    async for message in general.history():
-        if message.author.bot and message.content == _message:
-            print("\033[92mFound")
-            _C = message
-            found = True
-            break
-
-    if not found:
-        log("Generating new ...", 'proces')
+    global color_msg
+    general = trojsten.get_channel(cn.WELCOME_CHANNEL)
+    _message = st.COLOR_MESSAGE
+    management_log.info("Searching for color message ...")
+    color_msg = await hp.find_message(general, _message)
+    if color_msg is not None:
+        management_log.info("Color msg stat - OK")
+        for react in color_msg.reactions:
+            async for reactor in react.users():
+                for role, emoji in colors:
+                    if role not in reactor.roles and react.emoji == emoji:
+                        event_log.info(f"Added role {role.name} to {reactor.name}")
+                        await reactor.add_roles(role)
+        management_log.info("React -> Role sync - OK")
+    else:
+        management_log.info("Generating new ...")
         msg = await general.send(_message)
-        _C = msg
-        reactions = ['⬜', '🔶', '💚', '🔵']
+        color_msg = msg
+        reactions = [x[1] for x in colors]
         for emoji in reactions:
             await msg.add_reaction(emoji=emoji)
-    else:
-        log("Color msg stat - OK", 'ok')
-        for react in message.reactions:
-            white = trojsten.get_role(id_bank["whiterole"])
-            orange = trojsten.get_role(id_bank["orangerole"])
-            green = trojsten.get_role(id_bank["greenrole"])
-            blue = trojsten.get_role(id_bank["bluerole"])
-            async for reactor in react.users():
-                if white not in reactor.roles and orange not in reactor.roles and green not in reactor.roles and blue not in reactor.roles:
-                    if react.emoji == '⬜':
-                        await reactor.add_roles(white)
-                    elif react.emoji == '🔶':
-                        await reactor.add_roles(orange)
-                    elif react.emoji == '💚':
-                        await reactor.add_roles(green)
-                    elif react.emoji == '🔵':
-                        await reactor.add_roles(blue)
-        log("React <-> Role sync - OK", 'ok')
+
+# endregion
+
+# ##############################
+# ###### EVENT HANDLING  #######
+# ##############################
+
+# region Events
 
 
-@client.event
+# used for uncached data :
+
+@bot.event
 async def on_raw_reaction_add(payload):
-    if payload.channel_id == id_bank["welcome channel"] and _M.id == payload.message_id and _M.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        if payload.emoji == client.get_emoji(id_bank["kspemoji"]):
-            await user.add_roles(trojsten.get_role(id_bank["ksprole"]))
-        elif payload.emoji == client.get_emoji(id_bank["kmsemoji"]):
-            await user.add_roles(trojsten.get_role(id_bank["kmsrole"]))
-        elif payload.emoji == client.get_emoji(id_bank["fksemoji"]):
-            await user.add_roles(trojsten.get_role(id_bank["fksrole"]))
-        elif payload.emoji == client.get_emoji(id_bank["praskemoji"]):
-            await user.add_roles(trojsten.get_role(id_bank["praskrole"]))
-        elif payload.emoji == client.get_emoji(id_bank["ufoemoji"]):
-            await user.add_roles(trojsten.get_role(id_bank["uforole"]))
-    elif payload.channel_id == id_bank["welcome channel"] and _C.id == payload.message_id and _C.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        white = trojsten.get_role(id_bank["whiterole"])
-        orange = trojsten.get_role(id_bank["orangerole"])
-        green = trojsten.get_role(id_bank["greenrole"])
-        blue = trojsten.get_role(id_bank["bluerole"])
-        if white not in user.roles and orange not in user.roles and green not in user.roles and blue not in user.roles:
-            if payload.emoji.name == '⬜':
-                await user.add_roles(white)
-            elif payload.emoji.name == '🔶':
-                await user.add_roles(orange)
-            elif payload.emoji.name == '💚':
-                await user.add_roles(green)
-            elif payload.emoji.name == '🔵':
-                await user.add_roles(blue)
+    user = trojsten.get_member(payload.user_id)
+    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id and not user.bot:
+        for role, emoji in roles_and_emojis:
+            if payload.emoji == emoji:
+                event_log.info(f"User {user.name} added reaction on {role.name}")
+                await user.add_roles(role)
+    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id and not user.bot:
+        if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
+            for role, emoji in colors:
+                if payload.emoji.name == emoji:
+                    event_log.info(f"User {user.name} added reaction on {role.name}")
+                    await user.add_roles(role)
 
 
-@client.event
+@bot.event
 async def on_raw_reaction_remove(payload):
-    if payload.channel_id == id_bank["welcome channel"] and _M.id == payload.message_id and _M.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        if payload.emoji == client.get_emoji(id_bank["kspemoji"]):
-            ksp_r = trojsten.get_role(id_bank["ksprole"])
-            if ksp_r in user.roles:
-                await user.remove_roles(ksp_r)
-        elif payload.emoji == client.get_emoji(id_bank["kmsemoji"]):
-            kms_r = trojsten.get_role(id_bank["kmsrole"])
-            if kms_r in user.roles:
-                await user.remove_roles(kms_r)
-        elif payload.emoji == client.get_emoji(id_bank["fksemoji"]):
-            fks_r = trojsten.get_role(id_bank["fksrole"])
-            if fks_r in user.roles:
-                await user.remove_roles(fks_r)
-        elif payload.emoji == client.get_emoji(id_bank["praskemoji"]):
-            prask_r = trojsten.get_role(id_bank["praskrole"])
-            if prask_r in user.roles:
-                await user.remove_roles(prask_r)
-        elif payload.emoji == client.get_emoji(id_bank["ufoemoji"]):
-            ufo_r = trojsten.get_role(id_bank["uforole"])
-            if ufo_r in user.roles:
-                await user.remove_roles(ufo_r)
-    elif payload.channel_id == id_bank["welcome channel"] and _C.id == payload.message_id and _C.author.bot:
-        user = trojsten.get_member(payload.user_id)
-        white = trojsten.get_role(id_bank["whiterole"])
-        orange = trojsten.get_role(id_bank["orangerole"])
-        green = trojsten.get_role(id_bank["greenrole"])
-        blue = trojsten.get_role(id_bank["bluerole"])
-        if payload.emoji.name == '⬜':
-            if white in user.roles:
-                await user.remove_roles(white)
-        elif payload.emoji.name == '🔶':
-            if orange in user.roles:
-                await user.remove_roles(orange)
-        elif payload.emoji.name == '💚':
-            if green in user.roles:
-                await user.remove_roles(green)
-        elif payload.emoji.name == '🔵':
-            if blue in user.roles:
-                await user.remove_roles(blue)
+    user = trojsten.get_member(payload.user_id)
+    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id:
+        for role, emoji in roles_and_emojis:
+            if payload.emoji == emoji and (role in user.roles):
+                event_log.info(f"User {user.name} removed reaction on {role.name}")
+                await user.remove_roles(role)
+    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id:
+        for role, emoji in colors:
+            if payload.emoji.name == emoji:
+                if role in user.roles:
+                    event_log.info(f"User {user.name} removed reaction on {role.name}")
+                    await user.remove_roles(role)
 
 
-class Command:
-    def __init__(self, command, is_dm, rest_of_message):
-        self.command = command
-        self.is_from_dm = is_dm
-        self.msg = rest_of_message
+# used for cached data  :
+
+# events moderation commands wip
+async def react_iter(look, iterator):
+    async for user in iterator():
+        if user == look:
+            return True
+    return False
 
 
-async def commandloop():
-    while True:
-        inp = await commands.get()
-        if inp.msg != '':
-            try:
-                log(str(inp.msg.author.name) + " used command " + str(inp.command) + " with arguments " + str(
-                    inp.msg.content))
-            except:
-                log("Command log failed", 'error')
-        else:
-            log(str(inp.msg.author.name) + " used command " + str(inp.command))
-
-        coms = {"new": new_interesting,
-                "purge": admin_purge,
-                "subscribe": sub,
-                "exit": quyeet,
-                "rule": admin_rule,
-                "faq": admin_faq,
-                }
-        # if inp.content.startswith("new"):
-        #	await new_interesting(inp)
+async def add_warning(user, reason):
+    if user.name not in warnings:
+        warnings[user.id] = [1, reason]
+    else:
+        warnings[user.id][0] += 1
+        warnings[user.id].append(reason)
+        event_log.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
+    if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
         try:
-            await coms[inp.command](inp)
-        except:
-            await inp.msg.channel.send("Príkaz nebol nájdený")
-
-
-async def new_interesting(command):
-    if command.msg.channel.name == "zaujimave-ulohy" or command.msg.channel.name == "ad min":
-        if command.msg.channel.name == "ad min":
-            command.msg.channel = client.get_channel(id_bank["zaujimave-ulohy"])
-        await command.msg.channel.send(
-            "Hey guys, " + command.msg.author.name + " just posted a problem! Author can mark this problem "
-            + "<:solved:598782166121316363> once it is solved.")
-        await command.msg.pin()
-
-
-async def admin_purge(command):
-    # purges server
-    if command.msg.author == client.get_user(id_bank["MvKal"]):
-        if command.msg.content != None:
-            await trojsten.get_channel(int(command.msg.content)).purge(limit=None)
-        else:
-            print("specify channel")
-
-
-# for ch in trojsten.channels:
-#	if ch.type == "text":
-#		print("Inquisiting " + ch.name)
-#		await ch.purge(limit = None)
-
-async def admin_rule(command):
-    global udaje
-    if trojsten.get_role(id_bank['adminrole']) in command.msg.author.roles or trojsten.get_role(
-            id_bank['veduckorole']) in command.msg.author.roles:
-        if command.msg.channel == trojsten.get_channel(
-                id_bank["dev channel"]) or command.msg.channel == trojsten.get_channel(
-            id_bank["admin channel"]) or command.msg.channel == trojsten.get_channel(id_bank["testing channel"]):
-            if command.msg.content != '$rule':
-                parts = shlex.split(command.msg.content)
-                if parts[0] == "add" and len(parts) == 2:
-                    udaje['pravidla'].append(parts[1])
-                    await welcome_message()
-                    await command.msg.add_reaction(emoji='✅')
-                elif parts[0] == "remove" and len(parts) == 2:
-                    try:
-                        del udaje['pravidla'][int(parts[1]) - 1]
-                        await welcome_message()
-                        await command.msg.add_reaction(emoji='✅')
-                    except:
-                        await command.msg.channel.send("Pravidlo nebolo nájdené")
-                elif parts[0] == "edit" and len(parts) == 3:
-                    try:
-                        udaje['pravidla'][int(parts[1]) - 1] = parts[2]
-                        await welcome_message()
-                        await command.msg.add_reaction(emoji='✅')
-                    except:
-                        await command.msg.channel.send("Pravidlo nebolo nájdené")
-            else:
-                await command.msg.channel.send(
-                    '```Použitie príkazu ${0}:\n-------------------\n - ${0} add "pravidlo"\n - ${0} remove číslo_pravidla\n - ${0} edit číslo_pravidla "Nové pravidlo"```'.format(
-                        command.command))
-        else:
-            await command.msg.channel.send(
-                '`${0} sa dá použiť len v administrátorských chatoch`'.format(command.command))
+            await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
+            await user.dm_channel.send(st.BAN_MSG.format(cn.WARNINGS_TO_BAN))
+        except Exception:
+            await user.dm_channel.send(st.BAN_ERROR_U)
+            await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
+            event_log.exception("Error while issuing ban")
     else:
-        await command.msg.channel.send('`Nedostatočné práva na použitie: ${0}`'.format(command.command))
+        await user.dm_channel.send(st.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
 
 
-async def admin_faq(command):
-    global udaje
-    if trojsten.get_role(id_bank['adminrole']) in command.msg.author.roles or trojsten.get_role(
-            id_bank['veduckorole']) in command.msg.author.roles:
-        if command.msg.channel == trojsten.get_channel(
-                id_bank["dev channel"]) or command.msg.channel == trojsten.get_channel(
-            id_bank["admin channel"]) or command.msg.channel == trojsten.get_channel(id_bank["testing channel"]):
-            if command.msg.content != '$faq':
-                parts = shlex.split(command.msg.content)
-                if parts[0] == "add" and len(parts) == 3:
-                    udaje['faq'].append([parts[1], parts[2]])
-                    await welcome_message()
-                    await command.msg.add_reaction(emoji='✅')
-                elif parts[0] == "remove" and len(parts) == 2:
-                    try:
-                        del udaje['faq'][int(parts[1]) - 1]
-                        await welcome_message()
-                        await command.msg.add_reaction(emoji='✅')
-                    except:
-                        await command.msg.channel.send("FAQ nebolo nájdené")
-                elif parts[0] == "edit" and len(parts) == 4:
-                    try:
-                        udaje['faq'][int(parts[1]) - 1] = [
-                            parts[2] if parts[2] != "-" else udaje['faq'][int(parts[1]) - 1][0],
-                            parts[3] if parts[3] != "-" else udaje['faq'][int(parts[1]) - 1][1]]
-                        await welcome_message()
-                        await command.msg.add_reaction(emoji='✅')
-                    except:
-                        await command.msg.channel.send("FAQ nebolo nájdené")
-            else:
-                await command.msg.channel.send(
-                    '```Použitie príkazu ${0}:\n-------------------\n - ${0} add "otázka" "odpoveď"\n - ${0} remove číslo_faq_v_poradí\n - ${0} edit číslo_faq_v_poradí "Nová otázka" "Nová odpoveď"\n * pri použití edit "-" zachová pôvodnú otázku/odpoveď```'.format(
-                        command.command))
+@bot.event
+async def on_reaction_add(react, user):
+    global trojsten
+    global warnings
+    global weird_messages
+
+    if react.message.channel == cn.TASKS_CHANNEL and react.emoji == cn.CHECKMARK_EMOJI and react.message.pinned:
+        comm = f"{bot.get_prefix(react.message)}new"
+        if react.message.content.startswith(comm) and await react_iter(react.message.author, react.users):
+            task_name = react.message.content[5:]
+            await react.message.channel.send(st.TASK_COMPLETED.format(react.message.author.name, task_name))
+            await react.message.unpin()
+
+    elif react.emoji == bot.get_emoji(cn.CHEATALERT_EMOJI):  # cheat alert
+        if react.message.channel == trojsten.get_channel(cn.MODERATING_CHANNEL):  # moderating channel
+            nafetch = weird_messages[react.message.id]
+            react.message = await trojsten.get_channel(nafetch[1]).fetch_message(nafetch[0])
+            if react.message.author.dm_channel is None:
+                await react.message.author.create_dm()
+            await react.message.author.dm_channel.send(st.DELETE_NOTICE.format(react.message.author.mention))
+            hour = react.message.created_at.time().hour + 2
+            minute = react.message.created_at.time().minute
+            second = react.message.created_at.time().second
+            sent = datetime.time(hour=hour, minute=minute, second=second)
+            # react.message.created_at.time().hour += 2
+            timestr = sent.isoformat(timespec="seconds")
+            r_chan = react.message.channel.name
+            r_msg = react.message.content
+            details = st.DELETE_DETAILS.format(timestr, st.UTC_STRING, r_chan, r_msg)
+            await react.message.author.dm_channel.send(details)
+
+        # elif user in trojsten.get_role(598517418968743957).members and react.message.channel
+        # != trojsten.get_channel(599249382038044703): #role: Veducko, channel: isnt #moderating
+        # await react.message.channel.send(react.message.author +
+        # "!!! Your message was deleted because of serious rules violation.")
+        await react.message.delete()
+        await add_warning(react.message.author, "CHEAT alert emoji")
+
+    elif react.emoji == bot.get_emoji(cn.QUESTIONABLE_EMOJI):
+        chan = trojsten.get_channel(cn.MODERATING_CHANNEL)
+        s_message = st.SUSPICIOUS_MESSAGES(react.message.channel.name, react.message.content, react.message.jump_url)
+        newmsg = await chan.send(s_message)
+        weird_messages[newmsg.id] = (react.message.id, react.message.channel.id)
+
+    global ready
+    if not ready or react.message.author == bot:
+        return
+    # slowmode ????
+    """
+    slowmode = 10
+    if message.author in trojsten.get_role(id_bank["timeOut role"]).members: #timeOut role
+        if message.author.name not in timeouts:
+            timeouts[message.author.name] = time.time()
+        elif timeouts[message.author.name] + slowmode > time.time():
+            await message.delete()
+            return
         else:
-            await command.msg.channel.send(
-                '`${0} sa dá použiť len v administrátorských chatoch`'.format(command.command))
+            timeouts[message.author.name] = time.time()
+    """
+# endregion
+
+# ###############################
+# ###### COMMAND HANDLING #######
+# ###############################
+
+# region Commands
+
+
+# provides usage information for each command
+async def help_command(ctx):
+    help_header = st.HELP_HEADER.format(ctx.prefix, ctx.command.name)
+    msg_string = f"```{help_header}\n{cn.SEPARATOR_COUNT*cn.SEPARATOR}\n"
+    for usage in st.COMMANDS_HELP[ctx.command.name]:
+        if usage.startswith("*"):
+            msg_string += f"{usage}\n"
+        else:
+            msg_string += f" - {ctx.prefix}{ctx.command.name} {usage}\n"
+    msg_string += "```"
+    await ctx.channel.send(msg_string)
+
+
+# define error classes
+class WrongChannel(commands.CommandError):
+    pass
+
+
+class RuleNotFound(commands.CommandError):
+    pass
+
+
+class FaqNotFound(commands.CommandError):
+    pass
+
+
+# check functions used by commands
+def in_channel(*args):
+    def channel_check(ctx):
+        channels = [trojsten.get_channel(channel) for channel in args]
+        if ctx.channel not in channels:
+            raise WrongChannel()
+        else:
+            return True
+    return commands.check(channel_check)
+
+# COMMANDS ::
+
+# wip command
+@bot.command(enabled=False)
+@in_channel(cn.TASKS_CHANNEL, cn.ADMIN_CHANNEL)
+async def new(self, ctx):
+    if ctx.channel == trojsten.get_channel(cn.ADMIN_CHANNEL):
+        tchannel = self.bot.get_channel(cn.TASKS_CHANNEL)
+    await tchannel.send(st.TASK_SUBMITED.format(ctx.author.name, cn.TASK_DONE_EMOJI))
+    await ctx.pin()
+
+
+@bot.command(name='purge', enabled=False)
+@commands.has_role(cn.ADMIN_ROLE)
+async def admin_purge(ctx, channel):
+    # purges channel
+    if channel is not None:
+        await trojsten.get_channel(int(channel)).purge(limit=None)
     else:
-        await command.msg.channel.send('`Nedostatočné práva na použitie: ${0}`'.format(command.command))
+        await ctx.channel.send(st.PURGE_EMPTY_CHANNEL)
 
 
-async def sub(command):
-    global subscribes
-    if command.is_from_dm:
-        subscribes[command.msg.content.lower()] = command.msg.author.id
-        await command.msg.channel.send(
-            "Great! You will now get notifications, whenever something relating " + command.msg.content + " happens!")
+@bot.command(name='rule')
+@commands.guild_only()
+@in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
+@commands.has_any_role(cn.ADMIN_ROLE, cn.VEDUCI_ROLE)
+async def admin_rule(ctx, *args):
+
+    async def complete():
+        await welcome_message()
+        await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
+
+    if len(args) != 0:
+        command_log.info(ctx.message.content)
+        if args[0] == "add" and len(args) == 2:
+            udaje["rules"].append(args[1])
+            await complete()
+        elif args[0] == "remove" and len(args) == 2:
+            try:
+                del udaje["rules"][int(args[1])-1]
+                await complete()
+            except Exception:
+                raise RuleNotFound
+        elif args[0] == "edit" and len(args) == 3:
+            try:
+                udaje["rules"][int(args[1])-1] = args[2]
+                await complete()
+            except Exception:
+                raise RuleNotFound
+    else:
+        raise commands.UserInputError()
 
 
-async def quyeet(command):
-    if command.is_from_dm and command.msg.author == client.get_user(id_bank["MvKal"]):
-        save()
-        await client.close()
-        exit()
+@bot.command(name='faq')
+@commands.guild_only()
+@in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
+@commands.has_any_role(cn.ADMIN_ROLE, cn.VEDUCI_ROLE)
+async def admin_faq(ctx, *args):
+
+    async def complete():
+        await welcome_message()
+        await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
+
+    if len(args) != 0:
+        if args[0] == "add" and len(args) == 3:
+            udaje["faq"].append([args[1], args[2]])
+            await complete()
+        elif args[0] == "remove" and len(args) == 2:
+            try:
+                del udaje["faq"][int(args[1])-1]
+                await complete()
+            except Exception:
+                raise FaqNotFound
+        elif args[0] == "edit" and len(args) == 4:
+            try:
+                question = args[2] if args[2] != "-" else udaje["faq"][int(args[1])-1][0]
+                answer = args[3] if args[3] != "-" else udaje["faq"][int(args[1])-1][1]
+                udaje["faq"][int(args[1])-1] = [question, answer]
+                await complete()
+            except Exception:
+                raise FaqNotFound
+    else:
+        raise commands.UserInputError
 
 
+# wip cpmmand
+@bot.command(name='subscribe', aliases=['sub'], enabled=False)
+@commands.dm_only()
+async def subscribe(ctx, arg):
+    if arg == "list":
+        await ctx.channel.send(st.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
+    else:
+        subscribers[str(ctx.author.id)].append(arg)
+        await ctx.channel.send(st.SUB_RESPONSE.format(arg))
+
+
+@bot.command(name='lead')
+async def lead(ctx, seminar: typing.Optional[str]):
+    for sem in seminars:
+        if sem.name == seminar or sem.name == ctx.channel.name:
+            msg = (f"👑 {sem.result_table[0].name}\n"
+                   f"  2.   {sem.result_table[1].name}\n"
+                   f"  3.   {sem.result_table[2].name}\n")
+            await ctx.channel.send(msg)
+            return
+        raise commands.UserInputError
+
+
+@bot.event
+async def on_command_error(ctx, error):
+
+    command_log.info("Command ended with error.")
+
+    # if command has local error handler, return
+    if hasattr(ctx.command, "on_error"):
+        return
+
+    # get the original exception
+    error = getattr(error, "original", error)
+
+    if isinstance(error, commands.CommandNotFound):
+        await ctx.send(st.CMD_NONEXISTENT)
+        return
+
+    if isinstance(error, commands.DisabledCommand):
+        await ctx.channel.send(st.DISABLED_ERROR)
+        return
+
+    if isinstance(error, commands.UserInputError):
+        await help_command(ctx)
+        return
+
+    if isinstance(error, commands.NoPrivateMessage):
+        try:
+            await ctx.author.send(st.ONLY_GUILD_ERROR)
+        except discord.Forbidden:
+            pass
+        return
+
+    if isinstance(error, commands.PrivateMessageOnly):
+        await ctx.send(st.ONLY_DM_ERROR)
+        return
+
+    if isinstance(error, commands.CheckFailure):
+        await ctx.send(st.PERMISSION_ERROR)
+        return
+
+    if isinstance(error, WrongChannel):
+        await ctx.send(st.CHANNEL_ERROR.format(ctx.prefix, ctx.command.name))
+        return
+
+    if isinstance(error, RuleNotFound):
+        await ctx.send(st.RULE_NOT_FOUND)
+        return
+
+    if isinstance(error, FaqNotFound):
+        await ctx.channel.send(st.FAQ_NOT_FOUND)
+
+    # ignore all other exception types, but print them
+    command_log.warning(f"Ignoring exception in command {ctx.command.name}:")
+    command_log.exception("Unhandled exception occured while running command!")
+
+
+# Command debug events
+@bot.event
+async def on_command(ctx):
+    event_log.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
+
+
+@bot.event
+async def on_command_completion(ctx):
+    event_log.debug("Command executed succesfully.")
+# endregion
+
+
+# ####### MAIN LOOP ####### #
 async def permaloop():
     # global last_update
-
-    intervals = 900
     last_update = 0
     while True:
         await asyncio.sleep(2)
-        if last_update + 900 < time.time():
+        if last_update + cn.MINIMAL_UPDATE_DELAY < time.time():
             last_update = time.time()
             for s in seminars:
                 res = s.get_info()
                 for change in res:
-                    if change == "new problems":
+                    if change == "new tasks":
                         s.newroundmessage()
                         s.voting("release")
                     elif change == "new solutions":
@@ -505,144 +582,24 @@ async def permaloop():
                         s.end_message()
 
 
-@client.event
-async def on_message(message):
-    global ready
-    global trojsten
-    global timeouts
-    if not ready or message.author == trojsten.me:
-        return
+# #######################################
+# ###### WEB INFORMATION DOWNLOAD #######
+# #######################################
 
-    if message.author.dm_channel == message.channel:
-        if message.author == client.get_user(id_bank["MvKal"]):
-            if " " in message.content:
-                words = message.content[1:].split(" ")
-                message.content = " ".join(words[1:])
-                await commands.put(Command(words[0], True, message))
-            else:
-                await commands.put(Command(message.content[1:], True, message))
-        else:
-            await message.channel.send(
-                "Sorry, I have no functionality relating DM channels yet.. Enjoy my presence on Trojsten server instead :)")
-        return
-
-    '''slowmode = 10
-    if message.author in trojsten.get_role(id_bank["timeOut role"]).members: #timeOut role
-        if message.author.name not in timeouts:
-            timeouts[message.author.name] = time.time()
-        elif timeouts[message.author.name] + slowmode > time.time():
-            await message.delete()
-            return
-        else:
-            timeouts[message.author.name] = time.time()
-
-    if message.author.name=="Girl Jesus":
-        await message.add_reaction(client.get_emoji(id_bank["misko emoji"])) #misko emoji'''
-
-    if message.content.startswith("$"):
-        if " " in message.content:
-            words = message.content[1:].split(" ")
-            message.content = " ".join(words[1:])
-            await commands.put(Command(words[0], False, message))
-        else:
-            await commands.put(Command(message.content[1:], False, message))
+# region Web
 
 
-async def add_warning(user, reason):
-    warnings_to_ban = 3
-    if user.name not in warnings:
-        warnings[user.name] = [1, reason]
-    else:
-        warnings[user.name][0] += 1
-        warnings[user.name].append(reason)
-        log(user.name + " got warning because of " + reason + ". He has " + str(warnings[user.name][0]) + " warnings.",
-            'warning')
-    if warnings[user.name][0] >= warnings_to_ban:
-        try:
-            await trojsten.ban(user, reason=", ".join(warnings[user.name][1:]) + " --banned by bot.",
-                               delete_message_days=0)
-            await user.dm_channel.send("Number of warnings have reached " + str(
-                warnings_to_ban) + ". You are now banned from Trojsten server.")
-        except Exception as e:
-            await user.dm_channel.send(
-                "You have reached maximum number of warnings, but I am unable to ban you for some reason. High lord MvKal is notified about this and will deal with you accordingly.")
-            await trojsten.owner.dm_channel.send(
-                "I am unable to ban " + user.name + ", but he has reached maximum warnings. Handle this situation accordingly.\nException in console")
-            log(e, 'error')
-    else:
-        await user.dm_channel.send("You now get an official warning. You now have " + str(
-            warnings[user.name][0]) + " warnings. Once this number reaches " + str(
-            warnings_to_ban) + ", you will get a server ban. Contact moderators for further information.\n\n\n-Troj-stena")
-
-
-async def react_iter(look, iterator):
-    async for user in iterator():
-        if user == look:
-            return True
-
-    return False
-
-
-@client.event
-async def on_reaction_add(react, user):
-    global trojsten
-    global warnings
-    global weird_messages
-
-    if react.message.channel.name == "zaujimave-ulohy" and react.emoji == client.get_emoji(
-            id_bank["solved emoji"]) and await react_iter(react.message.author,
-                                                          react.users) and react.message.pinned and react.message.content.startswith(
-        "$new"):
-        await react.message.channel.send(
-            "WOW, somebody has solved " + react.message.author.name + "'s problem: " + react.message.content[
-                                                                                       5:] + "! Congrats!")
-        await react.message.unpin()
-    elif react.emoji == client.get_emoji(id_bank["cheatalert emoji"]):  # cheat alert
-        if react.message.channel == trojsten.get_channel(id_bank["moderating channel"]):  # moderating channel
-            nafetch = weird_messages[react.message.id]
-            react.message = await trojsten.get_channel(nafetch[1]).fetch_message(nafetch[0])
-            if react.message.author.dm_channel == None:
-                await react.message.author.create_dm()
-            await react.message.author.dm_channel.send(
-                react.message.author.name + ". Moderators decided, that your message (details below) violated rules, and is now deleted. Please respect server rules.")
-            sent = datetime.time(hour=react.message.created_at.time().hour + 2,
-                                 minute=react.message.created_at.time().minute,
-                                 second=react.message.created_at.time().second)
-            # react.message.created_at.time().hour += 2
-            await react.message.author.dm_channel.send(
-                "Message details:\nCreated at: " + sent.isoformat(timespec="seconds") + " of UTC+2" +
-                "\nSent to: " + react.message.channel.name +
-                "\nContents: " + react.message.content)
-        # elif user in trojsten.get_role(598517418968743957).members and react.message.channel != trojsten.get_channel(599249382038044703): #role: Veducko, channel: isnt #moderating
-        #	await react.message.channel.send(react.message.author + "!!! Your message was deleted because of serious rules violation.")
-        await react.message.delete()
-        await add_warning(react.message.author, "CHEAT alert emoji")
-
-
-    elif react.emoji == client.get_emoji(id_bank["questionable emoji"]):
-        chan = trojsten.get_channel(id_bank["moderating channel"])
-        newmsg = await chan.send(
-            "Questionable message in " + react.message.channel.name + ": " + react.message.content + "\nLink: " + react.message.jump_url)
-        weird_messages[newmsg.id] = (react.message.id, react.message.channel.id)
-
-
-@client.event
-async def on_reaction_remove(react, user):
-    # nothing .. for now
-    return
-
-
-class problem:
+class Task:
     def __init__(self, name, link, points):
         self.name = name
         self.link = link
         self.points = points
 
     def print_contents(self):
-        log([self.name, self.link, self.points])
+        web_log.debug([self.name, self.link, self.points])
 
 
-class person:
+class Person:
     def __init__(self, stat, name, year, school, level, points_bf, points, points_sum):
         self.stat = stat
         self.name = name
@@ -654,180 +611,185 @@ class person:
         self.points_sum = points_sum
 
     def print_contents(self):
-        log([self.stat, self.name, self.year, self.school, self.level, self.points_bf, self.points, self.points_sum])
-
-
-class GatheringException(Exception):
-    def __init__(self, seminar, message):
-        self.seminar = seminar
-        self.message = message
+        web_log.debug([self.stat, self.name, self.year, self.school,
+                      self.level, self.points_bf, self.points, self.points_sum])
 
 
 class Seminar:
-    def __init__(self, name, outchan, url):
-        global trojsten
 
+    # Set variables
+    def __init__(self, name):
         self.name = name
-        self.m_channel = outchan
-        self.url = url
+        self.m_channel = cn.SEMINAR_CHANNELS[self.name]
+        self.role = cn.SEMINAR_ROLES[self.name]
+        self.url = cn.SEMINAR_URLS[self.name]
+        self.emoji = cn.SEMINAR_EMOJIS[self.name]
         self.active = False
         self.year = 0
         self.round = 0
         self.part = 0
-        self.problems = []
+        self.tasks = []
         self.result_table = []
-        self.get_info()
-        self.p_length = len(self.problems)
+        self.get_tasks()
+        self.get_results()
+        self.p_length = len(self.tasks)
+        if (self.result_table is not None):
+            for res in self.result_table:
+                res.print_contents()
 
-    async def newroundmessage(self):
-        msg = "**New round of {0.mention} started!** \n You can start solving now -> {1}".format(
-            trojsten.get_role(id_bank[self.name + "role"]), self.url + "/ulohy")
-        await  self.outchan.send(msg)
+    def emoji_name(self):
+        textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
+        textB = "" if self.name == "ksp" else ("S" if self.name == "kms" else "KS")
+        return f"{textA}<:{self.name}:{self.emoji}>{textB}"
 
-    async def voting(self, type):
+    # # Announcments and voting messages
+    async def announcement(self, type):
+        a_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
+        if type == "release":
+            await a_channel.send(st.TASKS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+        elif type == "end":
+            await a_channel(st.TASK_ROUND_END.format(trojsten.get_role(self.role)))
+        elif type == "ideal solutions":
+            await a_channel.send(st.SOLUTIONS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+
+    async def voting(self):
         self.get_info()
         if self.active:
-            global botrole
-            global trojsten
-            vote_channel = trojsten.get_channel(id_bank["voting channel"])
-
-            if type == "release":
-                await vote_channel.send(
-                    "Hello, new problems are released!! You may now vote for each problem here <:badin:598483292034957312>")
-            elif type == "ideal solutions":
-                await vote_channel.send(
-                    "Hello, ideal solutions are released by our mighty leaders! You may now vote for each solution here <:badin:598483292034957312>")
-            await vote_channel.send("You can find them on website: " + self.url + "/ulohy")
-
+            vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
+            await vote_channel.send(self.emoji_name())
+            await vote_channel.send(st.VOTE_MESSAGE)
             for n in range(self.p_length):
-                msg = await vote_channel.send(str(n + 1) + ". " + self.problems[n].name)
+                await vote_channel.send(str(n+1) + ". " + self.tasks[n].name)
 
-                # reacty = ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "keycap_ten"]
-                # for r in range(self.zadani):
-                #	msg.add_reaction
-                await msg.add_reaction(client.get_emoji(id_bank["thup emoji"]))
-                await msg.add_reaction(client.get_emoji(id_bank["thdown emoji"]))
-                await msg.add_reaction(client.get_emoji(id_bank["badin emoji"]))
-
+    # # user notify system ##
     def set_result_table(self, dict):
         self.last_results = self.result_table
         self.result_table = dict
 
     async def update_on_results(self):
-        # await self.m_channel.send("Hey guys, some random veducko added some points! Go and check it out on " + self.url + "/vysledky/")
-        global subscribes
-        for key in subscribes:
+        global subscribers
+        for key in subscribers:
             try:
                 if self.result_table.index(key) != self.last_results.index(key):
-                    await client.get_user(subscribes[key]).dm_channel.send(
-                        "HEY, " + key + " has changed his position! Go check it out on " + self.url + "/vysledky")
-            except Exception as e:
-                print("Couldn't notify " + client.get_user.name + " about change in results table about " + subscribes[
-                    key])
-                print(e)
+                    await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
+            except Exception:
+                event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
 
-    async def end_message(self):
-        await self.m_channel.send(
-            "The round of " + self.name + " has officialy ended. Congratulations to every sucessful participant!")
+    def get_person(self, clovek, row_type):
+        pointers = []
+        level = None
+        for i in range(len(clovek)):
+            rt = str(row_type[i].text).strip()
+            if rt is None or rt == "":
+                rt = str(row_type[i][0].text).strip()
+            if "#" in rt:
+                cLass = clovek[i].find(".//span").attrib["class"]
+                class_to_state = {
+                    'glyphicon-asterisk': 'new',
+                    'glyphicon-chevron-down': 'dropped',
+                    'glyphicon-chevron-up': 'advanced',
+                    'glyphicon-pushpin': 'pinned'
+                }
+                state = "none"
+                for icon in class_to_state:
+                    if icon in cLass:
+                        state = class_to_state[icon]
+            elif "Meno" in rt:
+                name = clovek[i].text.strip()
+            elif "kola" in rt:
+                school = clovek[i][0].text.strip()
+            elif "R" in rt:
+                year = clovek[i].text.strip()
+            elif "Level" in rt or "K" in rt:
+                level = clovek[i][0].text.strip()
+            elif "P" in rt:
+                points_before = clovek[i][0].text.strip()
+            elif "∑" in rt:
+                points_sum = clovek[i][0].text.strip()
+            elif re.match(r"[1-9]", rt):
+                pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
+        return Person(state, name, year, school, level, points_before, pointers, points_sum)
 
-    def get_info(self):
+    def get_results(self):
         try:
-            responseP = requests.get(self.url + '/ulohy', allow_redirects=True)
-            responseR = requests.get(self.url + '/vysledky/', allow_redirects=True)
-            sourceCodeP = responseP.content
-            sourceCodeR = responseR.content
-        except:
-            raise GatheringException(self.name, "Conectivity error occured")
+            response = requests.get(self.url+"/vysledky/", allow_redirects=True)
+            sourceCode = response.content
+        except Exception:
+            web_log.exception(f"Connectivity error occured in {self.name}")
         try:
-            treeP = lxml.etree.HTML(sourceCodeP)
-            treeR = lxml.etree.HTML(sourceCodeR)
-        except:
-            raise GatheringException(self.name, "Web parsing error occured")
+            tree = lxml.etree.HTML(sourceCode)
+        except Exception:
+            web_log.exception(f"Web parsing error occured in {self.name}")
         try:
-            task_list = treeP.find('.//table')
-            result_list = treeR.find('.//table[@class="table table-hover table-condensed results-table"]')
-        except:
-            raise GatheringException(self.name, "Web not compatible")
+            result_list = tree.find('.//table[@class="table table-hover table-condensed results-table"]')
+        except Exception:
+            web_log.exception(f"Web is not compatible {self.name}")
         try:
             output = []
+            rows = result_list.findall(".//tr")
+            row_type = rows[0].findall(".//th")
+            results = []
+            for per in rows[1:]:
+                clovek = per.findall(".//td")
+                results.append(self.get_person(clovek, row_type))
+            if (self.result_table != results):
+                output.append("new results")
+            self.set_result_table(results)
+            web_log.info(f"Succesfully loaded results for seminar {self.name}")
+            return output
+        except Exception:
+            web_log.exception(f"Pulling error occured in {self.name}")
 
-            def get_results():
-                rows = result_list.findall('.//tr')
-                row_type = rows[0].findall('.//th')
-                results = []
-                for per in rows[1:]:
-                    state, name, year, school, level, points_before, pointers, points_sum = None, None, None, None, None, None, None, None
-                    clovek = per.findall('.//td')
-                    pointers = []
-                    for i in range(len(clovek)):
-                        rt = str(row_type[i].text).strip()
-                        if rt == None or rt == '':
-                            rt = str(row_type[i][0].text).strip()
-                        if '#' in rt:
-                            cLass = clovek[i].find('.//span').attrib['class']
-                            if 'glyphicon-asterisk' in cLass:
-                                state = 'new'
-                            elif 'glyphicon-chevron-down' in cLass:
-                                state = 'dropped'
-                            elif 'glyphicon-chevron-up' in cLass:
-                                state = 'advanced'
-                            elif 'glyphicon-pushpin' in cLass:
-                                state = 'pinned'
-                            else:
-                                state = 'none'
-                        elif 'Meno' in rt:
-                            name = clovek[i].text.strip()
-                        elif 'kola' in rt:
-                            school = clovek[i][0].text.strip()
-                        elif 'R' in rt:
-                            year = clovek[i].text.strip()
-                        elif 'Level' in rt or 'K' in rt:
-                            level = clovek[i][0].text.strip()
-                        elif 'P' in rt:
-                            points_before = clovek[i][0].text.strip()
-                        elif '∑' in rt:
-                            points_sum = clovek[i][0].text.strip()
-                        elif re.match(r'[1-9]', rt):
-                            pointers.append(None if clovek[i][0].text == None else clovek[i][0].text.strip())
-                    results.append(person(state, name, year, school, level, points_before, pointers, points_sum))
-                if (self.result_table != results): output.append("new results")
-                self.set_result_table(results)
-
-            if ('task-list' in task_list.attrib['class']):
+    def get_tasks(self):
+        try:
+            response = requests.get(self.url+"/ulohy/", allow_redirects=True)
+            sourceCode = response.content
+        except Exception:
+            web_log.exception(f"Connectivity error occured in {self.name}")
+        try:
+            tree = lxml.etree.HTML(sourceCode)
+        except Exception:
+            web_log.exception(f"Web parsing error occured in {self.name}")
+        try:
+            task_list = tree.find(".//table")
+        except Exception:
+            web_log.exception(f"Web is not compatible {self.name}")
+        try:
+            output = []
+            if "task-list" in task_list.attrib["class"]:
                 self.active = True
-                round_info = treeP.find('.//small').text.replace('\n', '').replace(' ', '').split(',')
-                # check for changes
-                round = round_info[0].split('.')[0]
-                part = round_info[1].split('.')[0]
-                year = round_info[2].split('.')[0]
-                self.problems = []
-                for node in task_list.findall('tr'):
+                round_info = tree.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
+                # set info
+                round = round_info[0].split(".")[0]
+                part = round_info[1].split(".")[0]
+                year = round_info[2].split(".")[0]
+                self.tasks = []
+                for node in task_list.findall("tr"):
                     pointers = []
-                    for pointer in node[2].findall('span'):
-                        pointers.append(pointer.text.replace('\xa0', '').split(':')[1])
-                    self.problems.append(problem(node[1][0].text, self.url + node[1][0].attrib['href'], pointers))
-                self.p_length = len(self.problems)
-                get_results()
-                if ((self.round != round or self.part != part or self.year != year) and len(
-                        self.problems) > 0): output.append('new problems')
+                    for pointer in node[2].findall("span"):
+                        pointers.append(pointer.text.replace("\xa0", "").split(":")[1])
+                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
+                self.p_length = len(self.tasks)
+                # check for changes
+                if (self.round != round or self.part != part or self.year != year) and len(self.tasks) > 0:
+                    output.append("new tasks")
                 self.round = round
                 self.part = part
                 self.year = year
-                self.remaining = treeP.find(".//div[@class='progress-bar progress-bar-info']").text
-                self.r_datetime = datetime.strptime(treeP.find(".//em").text[12:], "%d. %B %Y %H:%M")
+                # self.remaining = treeP.find(".//div[@class='progress-bar']").text
+                self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], "%d. %B %Y %H:%M")
+                web_log.info(f"Succesfully loaded tasks for seminar {self.name}")
                 return output
             else:
-                if self.active:
-                    output.append('end of round')
+                if self.active is False:
+                    output.append("end of round")
                 self.active = False
                 self.remaining = "Round not active"
-                get_results()
+                web_log.info(f"Tasks for {self.name} are not available")
                 return output
-        except:
-            raise GatheringException(self.name, "Gathering error occured")
+        except Exception:
+            web_log.exception(f"Pulling error occured in {self.name}")
+# endregion
 
 
-# TODO: mergenut voting channely do jedneho, lebo je to moc zaspamovane
-
-if __name__ == '__main__':
-    client.run("NTk4NDc3MjI2NTg0OTY1MTIy.XSXTWg.IgQkQwMI-4KV-gHoz7aDXguq6U8")
+bot.run(os.getenv('TOKEN'))

@@ -9,6 +9,8 @@ verify_ssl = true
 discord-py = "*"
 requests = "*"
 lxml = "*"
+flake8 = "*"
+python-dotenv = "*"
 
 [requires]
 python_version = "3.7"
