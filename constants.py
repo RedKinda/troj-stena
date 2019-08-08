@@ -9,6 +9,11 @@ WARNINGS_TO_BAN = 3
 TIME_ZONE = 2
 UTC_STRING = "UTC+{0}".format(TIME_ZONE)
 
+# database
+FB_USERS = u'users'
+FB_MSGS = u'messages'
+FB_SEMINARS = u'seminars'
+
 KMS_URL = "https://kms.sk"
 KSP_URL = "https://ksp.sk"
 FKS_URL = "https://fks.sk"

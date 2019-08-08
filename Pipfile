@@ -11,6 +11,7 @@ requests = "*"
 lxml = "*"
 flake8 = "*"
 python-dotenv = "*"
+firebase-admin = "*"
 
 [requires]
 python_version = "3.7"

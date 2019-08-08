@@ -1,11 +1,12 @@
 import asyncio
 import logging
 import os
-import pickle
 import re
 import sys
 import time
 import typing
+import traceback
+import collections
 from datetime import datetime
 
 import discord
@@ -19,21 +20,21 @@ from dotenv import load_dotenv
 import constants as cn
 import strings as st
 import helpers as hp
+import database as db
 
-# from aioconsole import ainput
 
 bot = Bot(command_prefix="$", status=discord.Status.online, activity=discord.Game(name=cn.BOT_MSG))
+bot.remove_command("help")  # delete existing help command
 trojsten = discord.Guild
 ready = False
 load_dotenv()
 
 # Set global variables
-warnings = {}
 weird_messages = {}
-subscribers = {}
 # timeouts = {}
 seminars = []
-udaje = {}
+users = {}
+message_data = {}
 
 color_msg = None
 white = discord.Role
@@ -56,9 +57,25 @@ web_log = logging.getLogger('web')
 loggers = [command_log, event_log, management_log, web_log]
 
 
+class User:
+    def __init__(self, warnings, subscribers):
+        self.warnings = warnings
+        self.subscribers = subscribers
+
+    @staticmethod
+    def from_dict(source):
+        return User(source['warnings'], source['subscriptions'])
+
+    def to_dict(self):
+        return {
+            'warnings': self.warnings,
+            'subscriptions': self.subscribers
+        }
+
+
 @bot.event
 async def on_ready():
-    global trojsten, subscribers, seminars, udaje, ready
+    global trojsten, users, seminars, message_data, ready
     global white, orange, green, blue, colors
     global admin, veduci
     # global timeouts
@@ -69,7 +86,7 @@ async def on_ready():
 
     trojsten = bot.get_guild(cn.GUILD_ID)
     if (trojsten is None):
-        logging.error("Guild not recognized! Change its ID in constants file")
+        logging.critical("Guild not recognized! Change its ID in constants file")
         await bot.close()
         sys.exit(1)
 
@@ -82,42 +99,40 @@ async def on_ready():
     admin = trojsten.get_role(cn.ADMIN_ROLE)
     veduci = trojsten.get_role(cn.VEDUCI_ROLE)
 
-    # loading files
-    filehandler = open(cn.SUBSCRIBER_FILE, "wb+")
-    try:			# load last saved subscriber list
-        reader = open(cn.SUBSCRIBER_FILE, "rb")
-        subscribers = pickle.load(reader)
-        reader.close()
-    except Exception:
-        logging.warning("Loading subscriber file failed")
-    filehandler.close()
-    filehandler = open(cn.CONTENT_FILE, "wb+")
-    try:			# loading data
-        reader = open(cn.CONTENT_FILE, "rb")
-        udaje = pickle.load(reader)
-        reader.close()
-    except EOFError:  # if there is no file, create it
-        udaje = {
-            "rules": st.DEFAULT_RULES,
-            "faq": st.DEFAULT_FAQ_CONTENT
-        }
-        pickle.dump(udaje, filehandler)
-    filehandler = open(cn.MAIN_DATA_FILE, "wb+")
-    try:			 # loading
-        reader = open(cn.MAIN_DATA_FILE, "rb")
-        seminars = pickle.load(reader)
-        reader.close()
-    except EOFError:  # if there is no file, create them
-        seminars = [Seminar("kms"),
-                    Seminar("fks"),
-                    Seminar("ksp"),
-                    Seminar("ufo"),
-                    Seminar("prask")]
+    # get message message_data
+    msgs = {"rules", "faq"}
+    for msg in msgs:
+        if db.check_document(cn.FB_MSGS, msg):
+            result = db.get_document(cn.FB_MSGS, msg).to_dict()[u"list"]
+            message_data[msg] = collections.OrderedDict(sorted(result.items()))
+    loader = hp.load_default_data("faq" not in message_data.keys(), "rules" not in message_data.keys())
+    if (len(loader) == 0):
+        logging.info("Loaded message database!")
+    else:
+        for msg in loader:
+            message_data[msg] = db.get_document(cn.FB_MSGS, msg).to_dict()[u"list"]
+        logging.info("Loaded and uploaded default message database!")
 
-        # Debug web gathering --> print first contestant in result table for seminar x
-        # print(seminars[1].result_table[0].print_contents())
-        pickle.dump(seminars, filehandler)
-    filehandler.close()
+    # add existin1g users to message_database, load saved
+    member_debug = {"l": 0, "c": 0}
+    for member in trojsten.members:
+        if member.id != bot.user.id:
+            if db.check_document(cn.FB_USERS, str(member.id)):
+                member_debug["l"] += 1
+                users[member.id] = User.from_dict(db.get_document(cn.FB_USERS, str(member.id)).to_dict())
+            else:
+                member_debug["c"] += 1
+                db.load(cn.FB_USERS, str(member.id), vars(User({"number": 0, "reasons": []}, [])))
+    logging.info(f"Loaded member database!\n - Loaded:{member_debug['l']} +:{member_debug['c']}")
+
+    # load saved info about seminars
+    sem_list = ["kms", "fks", "ksp", "ufo", "prask"]
+    for sem in sem_list:
+        if db.check_document(cn.FB_SEMINARS, sem):
+            seminars.append(Seminar.from_dict(db.get_document(cn.FB_SEMINARS, sem).to_dict()))
+        else:
+            db.load(cn.FB_SEMINARS, sem, Seminar(sem).to_dict())
+    logging.info("Loaded seminar database!")
 
     # setup classes
     for sem in seminars:
@@ -139,10 +154,11 @@ async def on_ready():
 async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
-    for i in range(len(udaje["rules"])):
-        _rules += f"{i+1}. {udaje['rules'][i]}\n"
-    for i in udaje["faq"]:
-        _faq += f"- *{i[0]}*\n{i[1]}\n"
+    for i in range(len(message_data["rules"])):
+        _rules += f"{i+1}. {message_data['rules'][list(message_data['rules'].keys())[i]]}\n"
+    for i in message_data["faq"].keys():
+        key = list(message_data['faq'][i].keys())[0]
+        _faq += f"> __*{key}*__\n{message_data['faq'][i][key]}\n"
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     management_log.info("searching for welcome message ...")
@@ -151,7 +167,6 @@ async def welcome_message():
         if (message.content != _message):
             await message.edit(content=_message)
             management_log.info("Changed")
-            pickle.dump(udaje, open(cn.CONTENT_FILE, "wb"))
         management_log.info("Welcome msg stat - OK")
     else:
         management_log.info("Generating new")
@@ -218,7 +233,7 @@ async def color_message():
 # region Events
 
 
-# used for uncached data :
+# used for uncached message_data :
 
 @bot.event
 async def on_raw_reaction_add(payload):
@@ -252,7 +267,7 @@ async def on_raw_reaction_remove(payload):
                     await user.remove_roles(role)
 
 
-# used for cached data  :
+# used for cached message_data  :
 
 # events moderation commands wip
 async def react_iter(look, iterator):
@@ -263,28 +278,29 @@ async def react_iter(look, iterator):
 
 
 async def add_warning(user, reason):
-    if user.name not in warnings:
-        warnings[user.id] = [1, reason]
+    if user.name not in users:
+        users.append(User({"number": 1, "reasons": [reason]}, []))
     else:
-        warnings[user.id][0] += 1
-        warnings[user.id].append(reason)
-        event_log.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
-    if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
+        users[user.id].warnings["number"] += 1
+        users[user.id].warnings["reasons"].append(reason)
+        event_log.info(f"{user.name} got warning because of {reason}."
+                       f"They have {str(users[user.id].warnings['number'])} warnings.")
+    if users[user.id].warnings["number"] >= cn.WARNINGS_TO_BAN:
         try:
-            await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
+            await trojsten.ban(user, reason=", ".join(users[user.id].warnings["reasons"]), delete_message_days=0)
             await user.dm_channel.send(st.BAN_MSG.format(cn.WARNINGS_TO_BAN))
         except Exception:
             await user.dm_channel.send(st.BAN_ERROR_U)
             await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
             event_log.exception("Error while issuing ban")
     else:
-        await user.dm_channel.send(st.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
+        await user.dm_channel.send(st.WARNING_MSG.format(str(users[user.id].warnings["number"]),
+                                                         str(cn.WARNINGS_TO_BAN)))
 
 
 @bot.event
 async def on_reaction_add(react, user):
     global trojsten
-    global warnings
     global weird_messages
 
     if react.message.channel == cn.TASKS_CHANNEL and react.emoji == cn.CHECKMARK_EMOJI and react.message.pinned:
@@ -418,22 +434,28 @@ async def admin_rule(ctx, *args):
         await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
-        command_log.info(ctx.message.content)
+        data = message_data['rules']
+        keys = list(data.keys())
         if args[0] == "add" and len(args) == 2:
-            udaje["rules"].append(args[1])
+            data[str(int(keys[-1])+1)] = args[1]
+            db.load_to_map(cn.FB_MSGS, u"rules", u"list", {str(int(keys[-1])+1): args[1]})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
-                del udaje["rules"][int(args[1])-1]
+                del data[keys[int(args[1])-1]]
+                db.remove_from_map(cn.FB_MSGS, u"rules", u"list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise RuleNotFound
         elif args[0] == "edit" and len(args) == 3:
             try:
-                udaje["rules"][int(args[1])-1] = args[2]
+                data[keys[int(args[1])-1]] = args[2]
+                db.load_to_map(cn.FB_MSGS, u"rules", u"list", {keys[int(args[1])-1]: args[2]})
                 await complete()
             except Exception:
                 raise RuleNotFound
+        else:
+            raise commands.UserInputError()
     else:
         raise commands.UserInputError()
 
@@ -449,23 +471,31 @@ async def admin_faq(ctx, *args):
         await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
+        data = message_data["faq"]
+        keys = list(data.keys())
         if args[0] == "add" and len(args) == 3:
-            udaje["faq"].append([args[1], args[2]])
+            data[str(int(keys[-1])+1)] = {args[1]: args[2]}
+            db.load_to_map(cn.FB_MSGS, u"faq", u"list", {str(int(keys[-1])+1): {args[1]: args[2]}})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
-                del udaje["faq"][int(args[1])-1]
+                del data[keys[int(args[1])-1]]
+                db.remove_from_map(cn.FB_MSGS, u"faq", u"list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise FaqNotFound
         elif args[0] == "edit" and len(args) == 4:
             try:
-                question = args[2] if args[2] != "-" else udaje["faq"][int(args[1])-1][0]
-                answer = args[3] if args[3] != "-" else udaje["faq"][int(args[1])-1][1]
-                udaje["faq"][int(args[1])-1] = [question, answer]
+                key = list(data[keys[int(args[1])-1]].keys())[0]
+                question = args[2] if args[2] != "-" else key
+                answer = args[3] if args[3] != "-" else data[keys[int(args[1])-1]][key]
+                data[keys[int(args[1])-1]] = {question: answer}
+                db.update_map(cn.FB_MSGS, u"faq", u"list", keys[int(args[1])-1], {question: answer})
                 await complete()
             except Exception:
                 raise FaqNotFound
+        else:
+            raise commands.UserInputError
     else:
         raise commands.UserInputError
 
@@ -475,14 +505,14 @@ async def admin_faq(ctx, *args):
 @commands.dm_only()
 async def subscribe(ctx, arg):
     if arg == "list":
-        await ctx.channel.send(st.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
+        await ctx.channel.send(st.SUB_LIST.format('\n'.join(users[str(ctx.author.id)].subscribers)))
     else:
-        subscribers[str(ctx.author.id)].append(arg)
+        users[str(ctx.author.id)].subscribers.append(arg)
         await ctx.channel.send(st.SUB_RESPONSE.format(arg))
 
 
 @bot.command(name='lead')
-async def lead(ctx, seminar: typing.Optional[str]):
+async def lead(ctx, seminar: typing.Optional[str], ):
     for sem in seminars:
         if sem.name == seminar or sem.name == ctx.channel.name:
             msg = (f"👑 {sem.result_table[0].name}\n"
@@ -490,7 +520,7 @@ async def lead(ctx, seminar: typing.Optional[str]):
                    f"  3.   {sem.result_table[2].name}\n")
             await ctx.channel.send(msg)
             return
-        raise commands.UserInputError
+    raise commands.UserInputError
 
 
 @bot.event
@@ -544,8 +574,8 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    command_log.warning(f"Ignoring exception in command {ctx.command.name}:")
-    command_log.exception("Unhandled exception occured while running command!")
+    command_log.error(f"Unhandled exception occured while running command {ctx.command.name}!")
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
 # Command debug events
@@ -595,6 +625,10 @@ class Task:
         self.link = link
         self.points = points
 
+    @staticmethod
+    def from_dict(source):
+        return Task(source["name"], source["link"], source["points"])
+
     def print_contents(self):
         web_log.debug([self.name, self.link, self.points])
 
@@ -610,6 +644,11 @@ class Person:
         self.points = points
         self.points_sum = points_sum
 
+    @staticmethod
+    def from_dict(source):
+        return Person(source["stat"], source["name"], source["year"], source["school"],
+                      source["level"], source["points_bf"], source["points"], source["points_sum"])
+
     def print_contents(self):
         web_log.debug([self.stat, self.name, self.year, self.school,
                       self.level, self.points_bf, self.points, self.points_sum])
@@ -618,24 +657,43 @@ class Person:
 class Seminar:
 
     # Set variables
-    def __init__(self, name):
+    def __init__(self, name, autoloadData=True):
         self.name = name
         self.m_channel = cn.SEMINAR_CHANNELS[self.name]
         self.role = cn.SEMINAR_ROLES[self.name]
         self.url = cn.SEMINAR_URLS[self.name]
         self.emoji = cn.SEMINAR_EMOJIS[self.name]
-        self.active = False
-        self.year = 0
-        self.round = 0
-        self.part = 0
-        self.tasks = []
-        self.result_table = []
-        self.get_tasks()
-        self.get_results()
-        self.p_length = len(self.tasks)
-        if (self.result_table is not None):
-            for res in self.result_table:
-                res.print_contents()
+        if autoloadData:
+            self.active = False
+            self.info = {
+                "year": 0,
+                "round": 0,
+                "part": 0
+            }
+            self.tasks = []
+            self.result_table = []
+            # dataload \
+            self.get_tasks()
+            self.get_results()
+            self.p_length = len(self.tasks)
+
+    @staticmethod
+    def from_dict(source):
+        sem = Seminar(source['name'], False)
+        sem.active = source['active']
+        sem.info = source['info']
+        sem.tasks = [Task.from_dict(task) for task in source['tasks']]
+        sem.result_table = [Person.from_dict(person) for person in source['r_table']]
+        return sem
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "active": self.active,
+            "info": self.info,
+            "tasks": [vars(task) for task in self.tasks],
+            "r_table": [vars(person) for person in self.result_table]
+        }
 
     def emoji_name(self):
         textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
@@ -667,13 +725,13 @@ class Seminar:
         self.result_table = dict
 
     async def update_on_results(self):
-        global subscribers
-        for key in subscribers:
-            try:
-                if self.result_table.index(key) != self.last_results.index(key):
-                    await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
-            except Exception:
-                event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
+        for user in users:
+            for subscriber in user.subscribers:
+                try:
+                    if self.result_table.index(subscriber) != self.last_results.index(subscriber):
+                        await bot.get_user(int(user)).dm_channel.send(st.SUB_CHANGE.format(subscriber, self.url))
+                except Exception:
+                    event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
 
     def get_person(self, clovek, row_type):
         pointers = []
@@ -760,9 +818,11 @@ class Seminar:
                 self.active = True
                 round_info = tree.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
                 # set info
-                round = round_info[0].split(".")[0]
-                part = round_info[1].split(".")[0]
-                year = round_info[2].split(".")[0]
+                info = {
+                    "year": round_info[2].split(".")[0],
+                    "round": round_info[0].split(".")[0],
+                    "part": round_info[1].split(".")[0]
+                }
                 self.tasks = []
                 for node in task_list.findall("tr"):
                     pointers = []
@@ -771,11 +831,9 @@ class Seminar:
                     self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
                 self.p_length = len(self.tasks)
                 # check for changes
-                if (self.round != round or self.part != part or self.year != year) and len(self.tasks) > 0:
+                if (self.info != info) and len(self.tasks) > 0:
                     output.append("new tasks")
-                self.round = round
-                self.part = part
-                self.year = year
+                self.info = info
                 # self.remaining = treeP.find(".//div[@class='progress-bar']").text
                 self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], "%d. %B %Y %H:%M")
                 web_log.info(f"Succesfully loaded tasks for seminar {self.name}")

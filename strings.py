@@ -7,23 +7,23 @@ DEFAULT_WELCOME_MESSAGE = ("{0}\n\nToto je miesto kde sa stretávajú účastní
                            "Pravidlá:\n{1}\n"
                            "Faq:\n{2}\n")
 
-DEFAULT_RULES = [("Správame sa slušne, rešpektujeme ostatných, nespamujeme, "
-                  "nepoužívame zbytočne ‘@ everyone’ a všetko čo by rozum napovedal."),
-                 "Rešpektujeme pokyny adminov.",
-                 "O riešeniach úloh je povolené sa baviť až keď sú zverejnené vzoráky."]
+DEFAULT_RULES = {u"0": (u"Správame sa slušne, rešpektujeme ostatných, nespamujeme, "
+                        u"nepoužívame zbytočne ‘@ everyone’ a všetko čo by rozum napovedal."),
+                 u"1": u"Rešpektujeme pokyny adminov.",
+                 u"2": u"O riešeniach úloh je povolené sa baviť až keď sú zverejnené vzoráky."}
 
-DEFAULT_FAQ_CONTENT = [["Som prvýkrát na discorde o čom to tu je?",
-                        ("Skús pohľadať na internete:\n Krátke: <https://www.youtube.com/watch?v=aYSQB0fUzv0>\n"
-                         " Dlhšie: <https://www.youtube.com/watch?v=le_CE--Mnvs>")],
-                       ["Ako fungujú role a čo to vlastne znamená?",
-                        ("Rola ti môže byť pridelená nižšie, kliknutím na niektoré z emoji. "
-                         "Role seminárov ti dávajú prístup k jednotlivým kanálom a taktiež budeš dostávať notifikácie, "
-                         "keď sa táto rola niekde označí. Farebná rola slúži len na to, aby zmenila farbu tvojho mena. "
-                         "Ostatné role vedia priradiť admini. ")],
-                       ["Ako je to s prezývkami?",
-                        ("Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "
-                         "alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "
-                         "a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")]]
+DEFAULT_FAQ_CONTENT = {u"0": {u"Som prvýkrát na discorde o čom to tu je?":
+                              (u"Skús pohľadať na internete:\n Krátke: <https://www.youtube.com/watch?v=aYSQB0fUzv0>\n"
+                               u" Dlhšie: <https://www.youtube.com/watch?v=le_CE--Mnvs>")},
+                       u"1": {u"Ako fungujú role a čo to vlastne znamená?":
+                              (u"Rola ti môže byť pridelená nižšie, kliknutím na niektoré z emoji. "
+                               u"Role seminárov ti dávajú prístup k jednotlivým kanálom a taktiež budeš dostávať "
+                               u"notifikácie, keď sa táto rola niekde označí. Farebná rola slúži len na to, aby zmenila"
+                               u" farbu tvojho mena. Ostatné role vedia priradiť admini.")},
+                       u"2": {u"Ako je to s prezývkami?":
+                              (u"Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "
+                               u"alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "
+                               u"a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")}}
 
 ADDITIONAL_CONTENT = "\nAk sa cítiš ako vedúci alebo starec, napíš {0} a bude ti priradená skupina"
 
