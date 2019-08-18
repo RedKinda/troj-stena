@@ -5,10 +5,11 @@
 *.pyproj
 .idea
 *.code-workspace
-__pycache__
 
 # enviromental variables file
 .env
 
-# test folder
-testing_files
+# folders
+testing_files/
+.vscode/
+__pycache__/

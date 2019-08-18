@@ -7,23 +7,23 @@ DEFAULT_WELCOME_MESSAGE = ("{0}\n\nToto je miesto kde sa stretávajú účastní
                            "Pravidlá:\n{1}\n"
                            "Faq:\n{2}\n")
 
-DEFAULT_RULES = {u"0": (u"Správame sa slušne, rešpektujeme ostatných, nespamujeme, "
-                        u"nepoužívame zbytočne ‘@ everyone’ a všetko čo by rozum napovedal."),
-                 u"1": u"Rešpektujeme pokyny adminov.",
-                 u"2": u"O riešeniach úloh je povolené sa baviť až keď sú zverejnené vzoráky."}
+DEFAULT_RULES = {"0": ("Správame sa slušne, rešpektujeme ostatných, nespamujeme, "
+                       "nepoužívame zbytočne ‘@ everyone’ a všetko čo by rozum napovedal."),
+                 "1": "Rešpektujeme pokyny adminov.",
+                 "2": "O riešeniach úloh je povolené sa baviť až keď sú zverejnené vzoráky."}
 
-DEFAULT_FAQ_CONTENT = {u"0": {u"Som prvýkrát na discorde o čom to tu je?":
-                              (u"Skús pohľadať na internete:\n Krátke: <https://www.youtube.com/watch?v=aYSQB0fUzv0>\n"
-                               u" Dlhšie: <https://www.youtube.com/watch?v=le_CE--Mnvs>")},
-                       u"1": {u"Ako fungujú role a čo to vlastne znamená?":
-                              (u"Rola ti môže byť pridelená nižšie, kliknutím na niektoré z emoji. "
-                               u"Role seminárov ti dávajú prístup k jednotlivým kanálom a taktiež budeš dostávať "
-                               u"notifikácie, keď sa táto rola niekde označí. Farebná rola slúži len na to, aby zmenila"
-                               u" farbu tvojho mena. Ostatné role vedia priradiť admini.")},
-                       u"2": {u"Ako je to s prezývkami?":
-                              (u"Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "
-                               u"alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "
-                               u"a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")}}
+DEFAULT_FAQ_CONTENT = {"0": {"Som prvýkrát na discorde o čom to tu je?":
+                             ("Skús pohľadať na internete:\n Krátke: <https://www.youtube.com/watch?v=aYSQB0fUzv0>\n"
+                              " Dlhšie: <https://www.youtube.com/watch?v=le_CE--Mnvs>")},
+                       "1": {"Ako fungujú role a čo to vlastne znamená?":
+                             ("Rola ti môže byť pridelená nižšie, kliknutím na niektoré z emoji. "
+                              "Role seminárov ti dávajú prístup k jednotlivým kanálom a taktiež budeš dostávať "
+                              "notifikácie, keď sa táto rola niekde označí. Farebná rola slúži len na to, aby zmenila"
+                              " farbu tvojho mena. Ostatné role vedia priradiť admini.")},
+                       "2": {"Ako je to s prezývkami?":
+                             ("Ako prezývku/nickname odporúčame používať to ako ťa v seminárovej komunite volajú, "
+                              "alebo ako chceš aby ťa volali. V prípade robenia neplechy s duplicitnými nicknames "
+                              "a predstierania že si niekto iný nebudeme váhať kickovať a banovať.")}}
 
 ADDITIONAL_CONTENT = "\nAk sa cítiš ako vedúci alebo starec, napíš {0} a bude ti priradená skupina"
 
@@ -32,12 +32,14 @@ COLOR_MESSAGE = "A farbu tvojho mena:"
 # event/system msgs
 TASKS_RELEASE = "**Kolo {0} je tu!** \n Riešenie sa môže začať -> {1}/ulohy"
 TASK_ROUND_END = "Kolo {0} skončilo. Gratulujeme úspešným riešitelom!"
-SOLUTIONS_RELEASE = "Ahojte, vedúci práve pridali vzoráky k najnovšiemu kolu {0}!\nMôžete ich nájsť tu:  {0}/ulohy"
+SOLUTIONS_RELEASE = ("Ahojte, vedúci práve pridali vzoráky k najnovšiemu kolu {0}!\n"
+                     "Môžete ich nájsť tu:  {0}/ulohy")
 VOTE_MESSAGE = "Tu môžeš označiť aktuálne úlohy, ktoré sa ti páčili:"
 # warning/ban moderation
 WARNING_MSG = ("Máš oficiálne upozornenie od adminov. Tvoj počet upozornení je {0}."
                "Keď toto číslo dosiahne {1}, dostaneš celoserveroový ban."
-               "Kontaktuj moderátora/admina pre viac info.\n\n\n-Troj-stena")
+               "Kontaktuj moderátora/admina pre viac info."
+               "\n\n\n-Troj-stena")
 BAN_MSG = "Počet upozornení dosiahol {0}. Váš účet bol pridaný na blacklist."
 BAN_ERROR_U = ("Máš maximálny možný počet upozornení, ale nebolo možné ťa zabanovať."
                "Admini sú upozornení a vyriešia túto situáciu.")
@@ -73,5 +75,10 @@ SUB_CHANGE = "Pozícia, alebo body pre {0} sa zmenili/a! Pozrieť sa môžeš tu
 # moderation messages
 DELETE_NOTICE = ("{0}. Vedenie sa rozhodlo, že tvoja správa (spomenutá nižšie) porušuje pravidlá."
                  "Správa bola zmazaná, v budúcnosti sa prosím riaď pravidlami serveru.")
-DELETE_DETAILS = ("Detaili zmazanej správy:\nZaslaná: {0} *({1})*\nKanál: {2}\n Obsah:\n{3}\n")
-SUSPICIOUS_MESSAGES = "Bola označená podozrivá správa v {0}:\n{1}\nLink: {2}"
+DELETE_DETAILS = ("Detaili zmazanej správy:\n"
+                  "Zaslaná: {0} *({1})*\n"
+                  "Kanál: {2}\n"
+                  "Obsah:\n{3}\n")
+SUSPICIOUS_MESSAGES = ("Bola označená podozrivá správa v {0}:\n"
+                       "{1}\n"
+                       "Link: {2}")

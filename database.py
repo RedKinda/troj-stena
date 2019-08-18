@@ -22,19 +22,19 @@ def check_document(collection, document):
     return False
 
 
-def load_to_map(collection, document, map, dict):
+def load_to_map(collection, document, object, content):
     doc_ref = db.collection(collection).document(document)
-    doc_ref.set({map: dict}, merge=True)
+    doc_ref.set({object: content}, merge=True)
 
 
-def update_map(collection, document, map, field, dict):
+def update_map(collection, document, object, field, content):
     doc_ref = db.collection(collection).document(document)
-    doc_ref.update({f"{map}.{field}": dict})
+    doc_ref.update({f"{object}.{field}": content})
 
 
-def remove_from_map(collection, document, map, field):
+def remove_from_map(collection, document, object, field):
     doc_ref = db.collection(collection).document(document)
-    doc_ref.update({f"{map}.{field}": firestore.DELETE_FIELD})
+    doc_ref.update({f"{object}.{field}": firestore.DELETE_FIELD})
 
 
 def load(collection, document, value):

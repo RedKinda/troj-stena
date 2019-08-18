@@ -69,7 +69,7 @@ class User:
 
 @bot.event
 async def on_ready():
-    global trojsten, users, seminars, message_data, ready
+    global trojsten, ready
     global white, orange, green, blue, colors
     global admin, veduci
     # global timeouts
@@ -79,7 +79,7 @@ async def on_ready():
     logging.info(f"Bot loaded as {bot.user.name}#{str(bot.user.discriminator)}")
 
     trojsten = bot.get_guild(cn.GUILD_ID)
-    if (trojsten is None):
+    if trojsten is None:
         logging.critical("Guild not recognized! Change its ID in constants file")
         await bot.close()
         sys.exit(1)
@@ -97,14 +97,14 @@ async def on_ready():
     msgs = {"rules", "faq"}
     for msg in msgs:
         if db.check_document(cn.FB_MSGS, msg):
-            result = db.get_document(cn.FB_MSGS, msg).to_dict()[u"list"]
+            result = db.get_document(cn.FB_MSGS, msg).to_dict()["list"]
             message_data[msg] = collections.OrderedDict(sorted(result.items()))
     loader = hp.load_default_data("faq" not in message_data.keys(), "rules" not in message_data.keys())
-    if (len(loader) == 0):
+    if len(loader) == 0:
         logging.info("Loaded message database!")
     else:
         for msg in loader:
-            message_data[msg] = db.get_document(cn.FB_MSGS, msg).to_dict()[u"list"]
+            message_data[msg] = db.get_document(cn.FB_MSGS, msg).to_dict()["list"]
         logging.info("Loaded and uploaded default message database!")
 
     # add existin1g users to message_database, load saved
@@ -148,8 +148,9 @@ async def on_ready():
 async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
+    keys = list(message_data['rules'].keys())
     for i in range(len(message_data["rules"])):
-        _rules += f"{i+1}. {message_data['rules'][list(message_data['rules'].keys())[i]]}\n"
+        _rules += f"{i+1}. {message_data['rules'][keys[i]]}\n"
     for i in message_data["faq"].keys():
         key = list(message_data['faq'][i].keys())[0]
         _faq += f"> __*{key}*__\n{message_data['faq'][i][key]}\n"
@@ -158,7 +159,7 @@ async def welcome_message():
     management_log.info("searching for welcome message ...")
     message = await hp.find_message(general, st.WELCOME_HEADER)
     if message is not None:
-        if (message.content != _message):
+        if message.content != _message:
             await message.edit(content=_message)
             management_log.info("Changed")
         management_log.info("Welcome msg stat - OK")
@@ -432,19 +433,19 @@ async def admin_rule(ctx, *args):
         keys = list(data.keys())
         if args[0] == "add" and len(args) == 2:
             data[str(int(keys[-1])+1)] = args[1]
-            db.load_to_map(cn.FB_MSGS, u"rules", u"list", {str(int(keys[-1])+1): args[1]})
+            db.load_to_map(cn.FB_MSGS, "rules", "list", {str(int(keys[-1])+1): args[1]})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
                 del data[keys[int(args[1])-1]]
-                db.remove_from_map(cn.FB_MSGS, u"rules", u"list", keys[int(args[1])-1])
+                db.remove_from_map(cn.FB_MSGS, "rules", "list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise RuleNotFound
         elif args[0] == "edit" and len(args) == 3:
             try:
                 data[keys[int(args[1])-1]] = args[2]
-                db.load_to_map(cn.FB_MSGS, u"rules", u"list", {keys[int(args[1])-1]: args[2]})
+                db.load_to_map(cn.FB_MSGS, "rules", "list", {keys[int(args[1])-1]: args[2]})
                 await complete()
             except Exception:
                 raise RuleNotFound
@@ -469,12 +470,12 @@ async def admin_faq(ctx, *args):
         keys = list(data.keys())
         if args[0] == "add" and len(args) == 3:
             data[str(int(keys[-1])+1)] = {args[1]: args[2]}
-            db.load_to_map(cn.FB_MSGS, u"faq", u"list", {str(int(keys[-1])+1): {args[1]: args[2]}})
+            db.load_to_map(cn.FB_MSGS, "faq", "list", {str(int(keys[-1])+1): {args[1]: args[2]}})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
                 del data[keys[int(args[1])-1]]
-                db.remove_from_map(cn.FB_MSGS, u"faq", u"list", keys[int(args[1])-1])
+                db.remove_from_map(cn.FB_MSGS, "faq", "list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise FaqNotFound
@@ -484,7 +485,7 @@ async def admin_faq(ctx, *args):
                 question = args[2] if args[2] != "-" else key
                 answer = args[3] if args[3] != "-" else data[keys[int(args[1])-1]][key]
                 data[keys[int(args[1])-1]] = {question: answer}
-                db.update_map(cn.FB_MSGS, u"faq", u"list", keys[int(args[1])-1], {question: answer})
+                db.update_map(cn.FB_MSGS, "faq", "list", keys[int(args[1])-1], {question: answer})
                 await complete()
             except Exception:
                 raise FaqNotFound
@@ -784,7 +785,7 @@ class Seminar:
             for per in rows[1:]:
                 clovek = per.findall(".//td")
                 results.append(self.get_person(clovek, row_type))
-            if (self.result_table != results):
+            if self.result_table != results:
                 output.append("new results")
             self.set_result_table(results)
             web_log.info(f"Succesfully loaded results for seminar {self.name}")
@@ -825,7 +826,7 @@ class Seminar:
                     self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
                 self.p_length = len(self.tasks)
                 # check for changes
-                if (self.info != info) and len(self.tasks) > 0:
+                if self.info != info and len(self.tasks) > 0:
                     output.append("new tasks")
                 self.info = info
                 # self.remaining = treeP.find(".//div[@class='progress-bar']").text
