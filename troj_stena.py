@@ -856,7 +856,7 @@ class Seminar:
     async def make_request(self, to):
         try:
             async with aiohttp.ClientSession() as session:
-                async with session.get(self.url+"/"+to+"/") as r:
+                async with session.get(f"{self.url}/{to}/") as r:
                     output = None
                     if to == "ulohy":
                         output = await self.get_tasks(r)
