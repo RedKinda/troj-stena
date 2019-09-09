@@ -4,12 +4,18 @@ import strings as st
 import database as db
 
 
-async def find_message(channel, starts_with):
+async def find_message(channel, msg_id):
     async for message in channel.history():
-        if message.author.bot and message.content.startswith(starts_with):
-            logging.info("Found")
-            return message
-            break
+        if isinstance(msg_id, int):
+            if message.author.bot and message.id == msg_id:
+                logging.info("Found")
+                return message
+                break
+        elif isinstance(msg_id, str):
+            if message.author.bot and message.content.startswith(msg_id):
+                logging.info("Found")
+                return message
+                break
     return None
 
 

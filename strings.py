@@ -30,11 +30,14 @@ ADDITIONAL_CONTENT = "\nAk sa cítiš ako vedúci alebo starec, napíš {0} a bu
 ROLE_MESSAGE = "Nižšie si môžeš vybrať zo seminárov, ktoré riešiš alebo ťa zaujímajú:"
 COLOR_MESSAGE = "A farbu tvojho mena:"
 # event/system msgs
-TASKS_RELEASE = "**Kolo {0} je tu!** \n Riešenie sa môže začať -> {1}/ulohy"
-TASK_ROUND_END = "Kolo {0} skončilo. Gratulujeme úspešným riešitelom!"
+TASKS_ANNOUNCEMENT = "**Kolo {} je tu!** Môžete začať riešiť:"
+TASKS_RELEASE = ["Vyšlo nové kolo {}", "Práve beží kolo {}.", "Úlohy nájdete [tu]({}/ulohy/)"]
+TASK_END_ANNOUNCEMENT = "Kolo {} skončilo. Gratulujeme úspešným riešitelom!"
+TASKS_ROUND_END = ["**Toto kolo {} už skončilo.**", "\\-- [Úlohy]({}/ulohy/)"]
 SOLUTIONS_RELEASE = ("Ahojte, vedúci práve pridali vzoráky k najnovšiemu kolu {0}!\n"
                      "Môžete ich nájsť tu:  {0}/ulohy")
 VOTE_MESSAGE = "Tu môžeš označiť aktuálne úlohy, ktoré sa ti páčili:"
+ROUND_END = "Kolo už skončilo."
 # warning/ban moderation
 WARNING_MSG = ("Máš oficiálne upozornenie od adminov. Tvoj počet upozornení je {0}."
                "Keď toto číslo dosiahne {1}, dostaneš celoserveroový ban."

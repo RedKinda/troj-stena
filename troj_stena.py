@@ -12,7 +12,7 @@ from datetime import datetime
 import discord
 import lxml
 import lxml.etree
-import requests
+import aiohttp
 from discord.ext import commands
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
@@ -27,6 +27,7 @@ bot = Bot(command_prefix="$", status=discord.Status.online, activity=discord.Gam
 bot.remove_command("help")  # delete existing help command
 trojsten = discord.Guild
 ready = False
+FIRST_CHECK = False
 load_dotenv()
 
 # Set global variables
@@ -125,18 +126,30 @@ async def on_ready():
         if db.check_document(cn.FB_SEMINARS, sem):
             seminars.append(Seminar.from_dict(db.get_document(cn.FB_SEMINARS, sem).to_dict()))
         else:
-            db.load(cn.FB_SEMINARS, sem, Seminar(sem).to_dict())
+            seminar = Seminar(sem)
+            seminars.append(seminar)
+            db.load(cn.FB_SEMINARS, sem, seminar.to_dict())
     logging.info("Loaded seminar database!")
 
     # setup classes
     for sem in seminars:
         sem.m_channel = bot.get_channel(sem.m_channel)
-        roles_and_emojis.append((trojsten.get_role(sem.role), bot.get_emoji(sem.emoji)))
+        sem.role = trojsten.get_role(sem.role)
+        sem.emoji = bot.get_emoji(sem.emoji)
+        if sem.active:
+            try:
+                sem.message = await hp.find_message(sem.m_channel, sem.msg_id)
+                bot.loop.create_task(updateloop(sem))
+            except Exception:
+                management_log.warning(f"Main seminar mesage of {sem.name} was removed or not found!")
+        roles_and_emojis.append((sem.role, sem.emoji))
 
     # MSGS #
     await welcome_message()
     await role_message()
     await color_message()
+
+    bot.loop.create_task(permaloop())
 
 
 # ###############################
@@ -144,7 +157,7 @@ async def on_ready():
 # ###############################
 
 
-# region Messages
+# region Messages    role_msg = await hp.find_message(general, _message)
 async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
@@ -157,7 +170,7 @@ async def welcome_message():
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     management_log.info("searching for welcome message ...")
-    message = await hp.find_message(general, st.WELCOME_HEADER)
+    message = await hp.find_message(general, _message)
     if message is not None:
         if message.content != _message:
             await message.edit(content=_message)
@@ -236,13 +249,13 @@ async def on_raw_reaction_add(payload):
     if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id and not user.bot:
         for role, emoji in roles_and_emojis:
             if payload.emoji == emoji:
-                event_log.info(f"User {user.name} added reaction on {role.name}")
+                event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
                 await user.add_roles(role)
     elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id and not user.bot:
         if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
             for role, emoji in colors:
                 if payload.emoji.name == emoji:
-                    event_log.info(f"User {user.name} added reaction on {role.name}")
+                    event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
                     await user.add_roles(role)
 
 
@@ -252,13 +265,13 @@ async def on_raw_reaction_remove(payload):
     if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id:
         for role, emoji in roles_and_emojis:
             if payload.emoji == emoji and (role in user.roles):
-                event_log.info(f"User {user.name} removed reaction on {role.name}")
+                event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
                 await user.remove_roles(role)
     elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id:
         for role, emoji in colors:
             if payload.emoji.name == emoji:
                 if role in user.roles:
-                    event_log.info(f"User {user.name} removed reaction on {role.name}")
+                    event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
                     await user.remove_roles(role)
 
 
@@ -587,24 +600,45 @@ async def on_command_completion(ctx):
 
 # ####### MAIN LOOP ####### #
 async def permaloop():
-    # global last_update
-    last_update = 0
-    while True:
-        await asyncio.sleep(2)
-        if last_update + cn.MINIMAL_UPDATE_DELAY < time.time():
-            last_update = time.time()
-            for s in seminars:
-                res = s.get_info()
-                for change in res:
-                    if change == "new tasks":
-                        s.newroundmessage()
-                        s.voting("release")
-                    elif change == "new solutions":
-                        s.voting("ideal solutions")
-                    elif change == "new results":
-                        s.update_on_results()
-                    elif change == "end of turn":
-                        s.end_message()
+    event_log.info("Entering permaloop ...")
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        checkpoint = time.time()
+        for s in seminars:
+            for res in await s.make_request("ulohy"):
+                if res == "NT":
+                    management_log.info(f"Task relase ocured in -> {s.name}")
+                    await s.new_message()
+                    await s.announcement("release")
+                    # await s.voting() - wip
+                    db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+                elif res == "NS":  # wip
+                    management_log.info(f"Solution relase ocured in -> {s.name}")
+                    await s.announcement("end")
+                    # await s.voting("solutions") - wip
+                elif res == "END":
+                    management_log.info(f"Round of {s.name} has ended")
+                    await s.end_message()
+                    await s.announcement("end")
+                db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+            if await s.make_request("vysledky") == "NR":
+                management_log.info(f"Result table in {s.name} changed")
+                # await s.update_on_results()
+                db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+        management_log.info(f"permaloop updated in {int((time.time()-checkpoint)*1000)}ms")
+        await asyncio.sleep(cn.MINIMAL_CHECKING_DELAY)
+    event_log.error("Exited infinite loop")
+
+
+async def updateloop(seminar):
+    event_log.info(f"Entering updateloop for seminar {seminar.name} ...")
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        await seminar.update_message()
+        if not seminar.active:
+            event_log.info(f"Exiting updateloop for seminar {seminar.name} ... the round has ended.")
+            return
+        await asyncio.sleep(cn.UPDATE_DELAY)
 
 
 # #######################################
@@ -615,17 +649,18 @@ async def permaloop():
 
 
 class Task:
-    def __init__(self, name, link, points):
+    def __init__(self, name, link, category, points):
         self.name = name
         self.link = link
+        self.category = category
         self.points = points
 
     @staticmethod
     def from_dict(source):
-        return Task(source["name"], source["link"], source["points"])
+        return Task(source["name"], source["link"], source["category"], source["points"])
 
     def print_contents(self):
-        web_log.debug([self.name, self.link, self.points])
+        web_log.debug([self.name, self.link, self.category, self.points])
 
 
 class Person:
@@ -658,6 +693,7 @@ class Seminar:
         self.role = cn.SEMINAR_ROLES[self.name]
         self.url = cn.SEMINAR_URLS[self.name]
         self.emoji = cn.SEMINAR_EMOJIS[self.name]
+        self.message = None
         if autoloadData:
             self.active = False
             self.info = {
@@ -666,11 +702,12 @@ class Seminar:
                 "part": 0
             }
             self.tasks = []
+            self.tasks_id = None
+            self.pb_stat = None
             self.result_table = []
-            # dataload \
-            self.get_tasks()
-            self.get_results()
             self.p_length = len(self.tasks)
+            self.msg_id = None
+            self.r_datetime = datetime.now()
 
     @staticmethod
     def from_dict(source):
@@ -679,6 +716,8 @@ class Seminar:
         sem.info = source['info']
         sem.tasks = [Task.from_dict(task) for task in source['tasks']]
         sem.result_table = [Person.from_dict(person) for person in source['r_table']]
+        sem.msg_id = source['message']
+        sem.r_datetime = datetime.strptime(source['datetime'], "%m/%d/%Y %H:%M:%S")
         return sem
 
     def to_dict(self):
@@ -687,32 +726,77 @@ class Seminar:
             "active": self.active,
             "info": self.info,
             "tasks": [vars(task) for task in self.tasks],
-            "r_table": [vars(person) for person in self.result_table]
+            "r_table": [vars(person) for person in self.result_table],
+            "message": self.msg_id,
+            "datetime": self.r_datetime.strftime("%m/%d/%Y %H:%M:%S")
         }
 
     def emoji_name(self):
         textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
         textB = "" if self.name == "ksp" else ("S" if self.name == "kms" else "KS")
-        return f"{textA}<:{self.name}:{self.emoji}>{textB}"
+        return f"{textA}{self.emoji}{textB}"
 
     # # Announcments and voting messages
-    async def announcement(self, type):
-        a_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
-        if type == "release":
-            await a_channel.send(st.TASKS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
-        elif type == "end":
-            await a_channel(st.TASK_ROUND_END.format(trojsten.get_role(self.role)))
-        elif type == "ideal solutions":
-            await a_channel.send(st.SOLUTIONS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+    async def announcement(self, atype):
+        a_channel = trojsten.get_channel(cn.ANNOUNCEMENTS_CHANNEL)
+        e = discord.Embed(title=f"Úlohy {self.name}",
+                          url=f"{self.url}ulohy/",
+                          colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]))
+        e.set_thumbnail(url=f"https://static.ksp.sk/images/{self.name}/{cn.SEMINAR_IMAGES[self.name]}")
+        if atype == "release":
+            await a_channel.send(st.TASKS_ANNOUNCEMENT.format(self.role.mention), embed=e)
+        elif atype == "end":
+            await a_channel(st.TASK_END_ANNOUNCEMENT.format(self.role))
+        elif atype == "solutions":
+            await a_channel.send(st.SOLUTIONS_RELEASE.format(self.role.mention))
 
     async def voting(self):
-        self.get_info()
-        if self.active:
-            vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
-            await vote_channel.send(self.emoji_name())
-            await vote_channel.send(st.VOTE_MESSAGE)
-            for n in range(self.p_length):
-                await vote_channel.send(str(n+1) + ". " + self.tasks[n].name)
+        vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
+        content = ""
+        for n in range(self.p_length):
+            content += (f"{str(n+1)}. [{self.tasks[n].name}]({self.tasks[n].link})\n")
+        v_msg = await vote_channel.send(f"{self.emoji_name()}\n{st.VOTE_MESSAGE}\n{content}")
+        await bot.add_reaction(v_msg, emoji=":one:")
+
+    async def get_time(self):
+        duration = (self.r_datetime - datetime.now()).total_seconds()
+        if duration > 0:
+            days = duration // 86400
+            duration -= days*86400
+            hours = duration // 3600
+            duration -= hours*3600
+            minutes = duration // 60
+            duration -= minutes*60
+            return f"{int(days)}d {int(hours)}h {int(minutes)}m {int(duration)}s"
+        else:
+            await self.make_request("ulohy")
+            return st.ROUND_END
+
+    async def get_msg_embed(self):
+        e = discord.Embed(colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]),
+                          description=st.TASKS_RELEASE[2].format(self.url+"/"),
+                          timestamp=self.r_datetime)
+        e.set_author(name=st.TASKS_RELEASE[1].format(self.name), url=self.url,
+                     icon_url=f"https://cdn.discordapp.com/emojis/{cn.SEMINAR_EMOJIS[self.name]}.png?v=1")
+        e.set_footer(text=await self.get_time(), icon_url=cn.HOURGLASS)
+        return e
+
+    async def new_message(self):
+        self.message = await self.m_channel.send(st.TASKS_RELEASE[0].format(self.role.mention),
+                                                 embed=await self.get_msg_embed())
+        await self.message.pin()
+        self.msg_id = self.message.id
+        bot.loop.create_task(updateloop(self))
+
+    async def update_message(self):
+        await self.message.edit(embed=await self.get_msg_embed())
+
+    async def end_message(self):
+        await self.message.edit(
+            content=st.TASKS_ROUND_END.format(self.role.mention, self.url+self.tasks_id+"/")
+        )
+        self.msg_id = None
+        self.message = None
 
     # # user notify system ##
     def set_result_table(self, dict):
@@ -763,12 +847,34 @@ class Seminar:
                 pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
         return Person(state, name, year, school, level, points_before, pointers, points_sum)
 
-    def get_results(self):
+    def get_time_data(self, tree):
+        pb = tree.find(".//div[@data-precision='DAY']")
+        self.tasks_id = pb.attrib["data-id"]
+        pb_stats = pb.find(".//div[@class='progress']")[0].attrib['class']
+        if "progress-bar-info" in pb_stats:
+            self.pb_stat = "info"
+        elif "progress-bar-warning" in pb_stats:
+            self.pb_stat = "warn"
+        elif "progress-bar-danger" in pb_stats:
+            self.pb_stat = "danger"
+        self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], " %d. %B %Y %H:%M")
+
+    async def make_request(self, to):
         try:
-            response = requests.get(self.url+"/vysledky/", allow_redirects=True)
-            sourceCode = response.content
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.url}/{to}/") as r:
+                    output = None
+                    if to == "ulohy":
+                        output = await self.get_tasks(r)
+                    elif to == "vysledky":
+                        output = await self.get_results(r)
+                    await session.close()
+                    return output
         except Exception:
             web_log.exception(f"Connectivity error occured in {self.name}")
+
+    async def get_results(self, request):
+        sourceCode = await request.text()
         try:
             tree = lxml.etree.HTML(sourceCode)
         except Exception:
@@ -776,9 +882,9 @@ class Seminar:
         try:
             result_list = tree.find('.//table[@class="table table-hover table-condensed results-table"]')
         except Exception:
-            web_log.exception(f"Web is not compatible {self.name}")
+            web_log.exception(f"Web is not compatible - {self.name}")
         try:
-            output = []
+            output = None
             rows = result_list.findall(".//tr")
             row_type = rows[0].findall(".//th")
             results = []
@@ -786,19 +892,15 @@ class Seminar:
                 clovek = per.findall(".//td")
                 results.append(self.get_person(clovek, row_type))
             if self.result_table != results:
-                output.append("new results")
+                output = "NR"
             self.set_result_table(results)
             web_log.info(f"Succesfully loaded results for seminar {self.name}")
             return output
         except Exception:
             web_log.exception(f"Pulling error occured in {self.name}")
 
-    def get_tasks(self):
-        try:
-            response = requests.get(self.url+"/ulohy/", allow_redirects=True)
-            sourceCode = response.content
-        except Exception:
-            web_log.exception(f"Connectivity error occured in {self.name}")
+    async def get_tasks(self, request):
+        sourceCode = await request.text()
         try:
             tree = lxml.etree.HTML(sourceCode)
         except Exception:
@@ -810,7 +912,11 @@ class Seminar:
         try:
             output = []
             if "task-list" in task_list.attrib["class"]:
-                self.active = True
+                if self.active is not True:
+                    self.active = True
+                    output.append("NT")
+                elif self.message is None:
+                    output.append("NT")
                 round_info = tree.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
                 # set info
                 info = {
@@ -819,25 +925,25 @@ class Seminar:
                     "part": round_info[1].split(".")[0]
                 }
                 self.tasks = []
-                for node in task_list.findall("tr"):
+                task_rows = task_list.findall("tr")
+                for node in task_rows:
                     pointers = []
-                    for pointer in node[2].findall("span"):
-                        pointers.append(pointer.text.replace("\xa0", "").split(":")[1])
-                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
+                    for pointer in node[len(node.findall("td"))-1].findall("span"):
+                        line = pointer.text.replace("\xa0", "").split(":")
+                        pointers.append({line[0]: line[1]})
+                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"],
+                                           node[2][0].text if len(task_rows) > 2 else None, pointers))
                 self.p_length = len(self.tasks)
+                self.get_time_data(tree)
                 # check for changes
-                if self.info != info and len(self.tasks) > 0:
-                    output.append("new tasks")
                 self.info = info
-                # self.remaining = treeP.find(".//div[@class='progress-bar']").text
-                self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], "%d. %B %Y %H:%M")
                 web_log.info(f"Succesfully loaded tasks for seminar {self.name}")
                 return output
             else:
-                if self.active is False:
-                    output.append("end of round")
-                self.active = False
-                self.remaining = "Round not active"
+                if self.active is True:
+                    output.append("END")
+                    self.active = False
+                    self.remaining = "Round not active"
                 web_log.info(f"Tasks for {self.name} are not available")
                 return output
         except Exception:
