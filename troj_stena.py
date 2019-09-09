@@ -634,11 +634,13 @@ async def updateloop(seminar):
     event_log.info(f"Entering updateloop for seminar {seminar.name} ...")
     await bot.wait_until_ready()
     while not bot.is_closed():
-        if seminar.active:
-            await seminar.update_message()
-        else:
+        await seminar.update_message()
+        if not seminar.active:
+            event_log.info(f"Exiting updateloop for seminar {seminar.name} ... the round has ended.")
             return
         await asyncio.sleep(cn.UPDATE_DELAY)
+
+
 # #######################################
 # ###### WEB INFORMATION DOWNLOAD #######
 # #######################################
@@ -756,34 +758,38 @@ class Seminar:
         v_msg = await vote_channel.send(f"{self.emoji_name()}\n{st.VOTE_MESSAGE}\n{content}")
         await bot.add_reaction(v_msg, emoji=":one:")
 
-    def get_time(self):
+    async def get_time(self):
         duration = (self.r_datetime - datetime.now()).total_seconds()
-        days = duration // 86400
-        duration -= days*86400
-        hours = duration // 3600
-        duration -= hours*3600
-        minutes = duration // 60
-        duration -= minutes*60
-        return f"{int(days)}d {int(hours)}h {int(minutes)}m {int(duration)}s"
+        if duration > 0:
+            days = duration // 86400
+            duration -= days*86400
+            hours = duration // 3600
+            duration -= hours*3600
+            minutes = duration // 60
+            duration -= minutes*60
+            return f"{int(days)}d {int(hours)}h {int(minutes)}m {int(duration)}s"
+        else:
+            await self.make_request("ulohy")
+            return st.ROUND_END
 
-    def get_msg_embed(self):
+    async def get_msg_embed(self):
         e = discord.Embed(colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]),
                           description=st.TASKS_RELEASE[2].format(self.url+"/"),
                           timestamp=self.r_datetime)
         e.set_author(name=st.TASKS_RELEASE[1].format(self.name), url=self.url,
                      icon_url=f"https://cdn.discordapp.com/emojis/{cn.SEMINAR_EMOJIS[self.name]}.png?v=1")
-        e.set_footer(text=self.get_time(), icon_url=cn.HOURGLASS)
+        e.set_footer(text=await self.get_time(), icon_url=cn.HOURGLASS)
         return e
 
     async def new_message(self):
         self.message = await self.m_channel.send(st.TASKS_RELEASE[0].format(self.role.mention),
-                                                 embed=self.get_msg_embed())
+                                                 embed=await self.get_msg_embed())
         await self.message.pin()
         self.msg_id = self.message.id
         bot.loop.create_task(updateloop(self))
 
     async def update_message(self):
-        await self.message.edit(embed=self.get_msg_embed())
+        await self.message.edit(embed=await self.get_msg_embed())
 
     async def end_message(self):
         await self.message.edit(

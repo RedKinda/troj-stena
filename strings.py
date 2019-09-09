@@ -37,6 +37,7 @@ TASKS_ROUND_END = ["**Toto kolo {} už skončilo.**", "\\-- [Úlohy]({}/ulohy/)"
 SOLUTIONS_RELEASE = ("Ahojte, vedúci práve pridali vzoráky k najnovšiemu kolu {0}!\n"
                      "Môžete ich nájsť tu:  {0}/ulohy")
 VOTE_MESSAGE = "Tu môžeš označiť aktuálne úlohy, ktoré sa ti páčili:"
+ROUND_END = "Kolo už skončilo."
 # warning/ban moderation
 WARNING_MSG = ("Máš oficiálne upozornenie od adminov. Tvoj počet upozornení je {0}."
                "Keď toto číslo dosiahne {1}, dostaneš celoserveroový ban."
