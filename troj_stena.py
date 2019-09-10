@@ -857,7 +857,8 @@ class Seminar:
             self.pb_stat = "warn"
         elif "progress-bar-danger" in pb_stats:
             self.pb_stat = "danger"
-        self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], " %d. %B %Y %H:%M")
+        end_date = tree.find(".//em").text[12:]
+        self.r_datetime = datetime.strptime(hp.convert_month(end_date), " %d. %B %Y %H:%M")
 
     async def make_request(self, to):
         try:

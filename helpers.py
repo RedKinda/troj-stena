@@ -16,7 +16,7 @@ async def find_message(channel, msg_id):
                 logging.info("Found")
                 return message
                 break
-    return None
+    raise Exception
 
 
 def load_default_data(faq=True, rules=True):
@@ -28,3 +28,9 @@ def load_default_data(faq=True, rules=True):
         db.load_to_map(cn.FB_MSGS, u'rules', u'list', st.DEFAULT_RULES)
         ret.append("rules")
     return ret
+
+
+def convert_month(mnt):
+    for month in cn.MONTHS.keys():
+        if month in mnt:
+            return mnt.replace(month, cn.MONTHS[month])

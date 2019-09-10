@@ -9,6 +9,20 @@ UPDATE_DELAY = 60
 WARNINGS_TO_BAN = 3
 TIME_ZONE = 2
 UTC_STRING = "UTC+{0}".format(TIME_ZONE)
+HOURGLASS = "https://img.icons8.com/color/48/000000/hourglass.png"
+MONTHS = {
+    "január": "january",
+    "február": "february",
+    "marec": "march",
+    "apríl": "april",
+    "máj": "may",
+    "jún": "june",
+    "júl": "july",
+    "august": "august",
+    "september": "september",
+    "október": "october",
+    "december": "december"
+}
 
 # database
 FB_USERS = u'users'
