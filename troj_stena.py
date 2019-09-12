@@ -170,13 +170,13 @@ async def welcome_message():
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     management_log.info("searching for welcome message ...")
-    message = await hp.find_message(general, _message)
-    if message is not None:
+    try:
+        message = await hp.find_message(general, _message)
         if message.content != _message:
             await message.edit(content=_message)
             management_log.info("Changed")
         management_log.info("Welcome msg stat - OK")
-    else:
+    except Exception:
         management_log.info("Generating new")
         await general.send(_message)
 
@@ -189,8 +189,8 @@ async def role_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _message = st.ROLE_MESSAGE
     management_log.info("Searching for role message ...")
-    role_msg = await hp.find_message(general, _message)
-    if role_msg is not None:
+    try:
+        role_msg = await hp.find_message(general, _message)
         management_log.info("React msg stat - OK")
         for react in role_msg.reactions:
             async for reactor in react.users():
@@ -199,12 +199,12 @@ async def role_message():
                         logging.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    else:
+    except Exception:
         management_log.info("Generating new")
         msg = await general.send(_message)
         role_msg = msg
         for sem in seminars:
-            await msg.add_reaction(bot.get_emoji(sem.emoji))
+            await msg.add_reaction(emoji=sem.emoji)
 
 color_msg = None
 
@@ -214,8 +214,8 @@ async def color_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _message = st.COLOR_MESSAGE
     management_log.info("Searching for color message ...")
-    color_msg = await hp.find_message(general, _message)
-    if color_msg is not None:
+    try:
+        color_msg = await hp.find_message(general, _message)
         management_log.info("Color msg stat - OK")
         for react in color_msg.reactions:
             async for reactor in react.users():
@@ -224,7 +224,7 @@ async def color_message():
                         event_log.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    else:
+    except Exception:
         management_log.info("Generating new ...")
         msg = await general.send(_message)
         color_msg = msg
@@ -246,33 +246,35 @@ async def color_message():
 @bot.event
 async def on_raw_reaction_add(payload):
     user = trojsten.get_member(payload.user_id)
-    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id and not user.bot:
-        for role, emoji in roles_and_emojis:
-            if payload.emoji == emoji:
-                event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
-                await user.add_roles(role)
-    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id and not user.bot:
-        if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
-            for role, emoji in colors:
-                if payload.emoji.name == emoji:
+    if payload.channel_id == cn.WELCOME_CHANNEL and not user.bot:
+        if role_msg.id == payload.message_id:
+            for role, emoji in roles_and_emojis:
+                if payload.emoji == emoji:
                     event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
                     await user.add_roles(role)
+        elif color_msg.id == payload.message_id:
+            if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
+                for role, emoji in colors:
+                    if payload.emoji.name == emoji:
+                        event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
+                        await user.add_roles(role)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload):
     user = trojsten.get_member(payload.user_id)
-    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id:
-        for role, emoji in roles_and_emojis:
-            if payload.emoji == emoji and (role in user.roles):
-                event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
-                await user.remove_roles(role)
-    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id:
-        for role, emoji in colors:
-            if payload.emoji.name == emoji:
-                if role in user.roles:
+    if payload.channel_id == cn.WELCOME_CHANNEL:
+        if role_msg.id == payload.message_id:
+            for role, emoji in roles_and_emojis:
+                if payload.emoji == emoji and (role in user.roles):
                     event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
                     await user.remove_roles(role)
+        elif color_msg.id == payload.message_id:
+            for role, emoji in colors:
+                if payload.emoji.name == emoji:
+                    if role in user.roles:
+                        event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
+                        await user.remove_roles(role)
 
 
 # used for cached message_data  :
@@ -634,7 +636,10 @@ async def updateloop(seminar):
     event_log.info(f"Entering updateloop for seminar {seminar.name} ...")
     await bot.wait_until_ready()
     while not bot.is_closed():
-        await seminar.update_message()
+        try:
+            await seminar.update_message()
+        except Exception as e:
+            event_log.warning(f"{seminar.name} >>> Error occured while updating {e}")
         if not seminar.active:
             event_log.info(f"Exiting updateloop for seminar {seminar.name} ... the round has ended.")
             return
@@ -774,7 +779,7 @@ class Seminar:
 
     async def get_msg_embed(self):
         e = discord.Embed(colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]),
-                          description=st.TASKS_RELEASE[2].format(self.url+"/"),
+                          description=st.TASKS_RELEASE[2].format(self.url),
                           timestamp=self.r_datetime)
         e.set_author(name=st.TASKS_RELEASE[1].format(self.name), url=self.url,
                      icon_url=f"https://cdn.discordapp.com/emojis/{cn.SEMINAR_EMOJIS[self.name]}.png?v=1")
