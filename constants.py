@@ -40,6 +40,18 @@ SEMINAR_URLS = {"kms": KMS_URL,
                 "ufo": UFO_URL,
                 "prask": PRASK_URL}
 
+SEMINAR_IMAGES = {"kms": "logo.a73b1937cd94.png",
+                  "ksp": "logo.cd4914deab76.png",
+                  "fks": "logo.e002438870e4.png",
+                  "ufo": "logo.37f14e0d58e0.png",
+                  "prask": "logo.502d3ea202e2.png"}
+
+SEMINAR_COLOURS = {"kms": 0x2a53c5,
+                   "ksp": 0x818f3d,
+                   "fks": 0xce861e,
+                   "ufo": 0xce861e,
+                   "prask": 0x818f3d}
+
 # help commands
 SEPARATOR = "-"
 SEPARATOR_COUNT = 20
