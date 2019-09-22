@@ -142,7 +142,7 @@ async def on_ready():
             try:
                 sem.message = await hp.find_message(sem.m_channel, sem.msg_id)
                 bot.loop.create_task(updateloop(sem))
-            except Exception:
+            except hp.MessageNotFoundException:
                 management_log.warning(f"Main seminar mesage of {sem.name} was removed or not found!", exc_info=True)
         roles_and_emojis.append((sem.role, sem.emoji))
 
@@ -178,7 +178,7 @@ async def welcome_message():
             await message.edit(content=_message)
             management_log.info("Changed")
         management_log.info("Welcome msg stat - OK")
-    except Exception:
+    except hp.MessageNotFoundException:
         management_log.info("Generating new", exc_info=True)
         await general.send(_message)
 
@@ -201,7 +201,7 @@ async def role_message():
                         logging.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    except Exception:
+    except hp.MessageNotFoundException:
         management_log.info("Generating new")
         msg = await general.send(_message)
         role_msg = msg
@@ -226,7 +226,7 @@ async def color_message():
                         event_log.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    except Exception:
+    except hp.MessageNotFoundException:
         management_log.info("Generating new ...")
         msg = await general.send(_message)
         color_msg = msg
@@ -249,12 +249,12 @@ async def color_message():
 async def on_raw_reaction_add(payload):
     user = trojsten.get_member(payload.user_id)
     if payload.channel_id == cn.WELCOME_CHANNEL and not user.bot:
-        if role_msg.id == payload.message_id:
+        if role_msg and role_msg.id == payload.message_id:
             for role, emoji in roles_and_emojis:
                 if payload.emoji == emoji:
                     event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
                     await user.add_roles(role)
-        elif color_msg.id == payload.message_id:
+        elif color_msg and color_msg.id == payload.message_id:
             if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
                 for role, emoji in colors:
                     if payload.emoji.name == emoji:
@@ -266,12 +266,12 @@ async def on_raw_reaction_add(payload):
 async def on_raw_reaction_remove(payload):
     user = trojsten.get_member(payload.user_id)
     if payload.channel_id == cn.WELCOME_CHANNEL:
-        if role_msg.id == payload.message_id:
+        if role_msg and role_msg.id == payload.message_id:
             for role, emoji in roles_and_emojis:
                 if payload.emoji == emoji and (role in user.roles):
                     event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
                     await user.remove_roles(role)
-        elif color_msg.id == payload.message_id:
+        elif color_msg and color_msg.id == payload.message_id:
             for role, emoji in colors:
                 if payload.emoji.name == emoji:
                     if role in user.roles:
@@ -766,15 +766,14 @@ class Seminar:
         await bot.add_reaction(v_msg, emoji=":one:")
 
     async def get_time(self):
-        duration = (self.r_datetime - datetime.now()).total_seconds()
-        if duration > 0:
-            days = duration // 86400
-            duration -= days*86400
-            hours = duration // 3600
-            duration -= hours*3600
-            minutes = duration // 60
-            duration -= minutes*60
-            return f"{int(days)}d {int(hours)}h {int(minutes)}m {int(duration)}s"
+        remaining = (self.r_datetime - datetime.now()).total_seconds()
+        if remaining > 0:
+            days = remaining // 86400
+            remaining %= 86400
+            hours = remaining // 3600
+            remaining %= 3600
+            minutes = remaining // 60
+            return f"{int(days)}d {int(hours)}h {int(minutes)}m"
         else:
             await self.make_request("ulohy")
             return st.ROUND_END

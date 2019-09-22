@@ -11,9 +11,9 @@ class MessageNotFoundException(Exception):
 async def find_message(channel, query):
 
     if isinstance(query, int):
-        return find_message_by_id(channel, query)
+        return await find_message_by_id(channel, query)
     if isinstance(query, str):
-        return find_message_by_content_prefix(channel, query)
+        return await find_message_by_content_prefix(channel, query)
     raise ValueError("Invalid query type")
 
 
