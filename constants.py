@@ -4,10 +4,30 @@ GUILD_ID = 598476317758849024
 DEBUG_MODE = False
 BOT_MSG = ":)"
 ZAJO_ID = 185106567916421121
-MINIMAL_UPDATE_DELAY = 900
+MINIMAL_CHECKING_DELAY = 900
+UPDATE_DELAY = 60
 WARNINGS_TO_BAN = 3
 TIME_ZONE = 2
 UTC_STRING = "UTC+{0}".format(TIME_ZONE)
+HOURGLASS = "https://img.icons8.com/color/48/000000/hourglass.png"
+MONTHS = {
+    "január": "january",
+    "február": "february",
+    "marec": "march",
+    "apríl": "april",
+    "máj": "may",
+    "jún": "june",
+    "júl": "july",
+    "august": "august",
+    "september": "september",
+    "október": "october",
+    "december": "december"
+}
+
+# database
+FB_USERS = u'users'
+FB_MSGS = u'messages'
+FB_SEMINARS = u'seminars'
 
 KMS_URL = "https://kms.sk"
 KSP_URL = "https://ksp.sk"
@@ -19,6 +39,19 @@ SEMINAR_URLS = {"kms": KMS_URL,
                 "fks": FKS_URL,
                 "ufo": UFO_URL,
                 "prask": PRASK_URL}
+
+SEMINAR_IMAGES = {"kms": "logo.a73b1937cd94.png",
+                  "ksp": "logo.cd4914deab76.png",
+                  "fks": "logo.e002438870e4.png",
+                  "ufo": "logo.37f14e0d58e0.png",
+                  "prask": "logo.502d3ea202e2.png"}
+
+SEMINAR_COLOURS = {"kms": 0x2a53c5,
+                   "ksp": 0x818f3d,
+                   "fks": 0xce861e,
+                   "ufo": 0xce861e,
+                   "prask": 0x818f3d}
+
 # help commands
 SEPARATOR = "-"
 SEPARATOR_COUNT = 20
@@ -39,6 +72,7 @@ TASK_DONE_EMOJI = CHECKMARK_EMOJI
 # channels
 TASKS_CHANNEL = 598522778743734342
 MODERATING_CHANNEL = 599249382038044703
+ANNOUNCEMENTS_CHANNEL = 598481697100791839
 VOTING_CHANNEL = 600688938562093058
 WELCOME_CHANNEL = 600944280650907678
 DEV_CHANNEL = 598490170236338176
@@ -54,7 +88,6 @@ SEMINAR_CHANNELS = {"kms": KMS_CHANNEL,
                     "fks": FKS_CHANNEL,
                     "ufo": UFO_CHANNEL,
                     "prask": PRASK_CHANNEL}
-
 # roles
 TIME_OUT_ROLE = 598815157975515147
 ADMIN_ROLE = 598478860824346624

@@ -1,17 +1,19 @@
 import asyncio
 import logging
 import os
-import pickle
 import re
 import sys
 import time
 import typing
+import traceback
+import collections
+import datetime as datetime_whole
 from datetime import datetime
 
 import discord
 import lxml
 import lxml.etree
-import requests
+import aiohttp
 from discord.ext import commands
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
@@ -19,21 +21,22 @@ from dotenv import load_dotenv
 import constants as cn
 import strings as st
 import helpers as hp
+import database as db
 
-# from aioconsole import ainput
 
 bot = Bot(command_prefix="$", status=discord.Status.online, activity=discord.Game(name=cn.BOT_MSG))
+bot.remove_command("help")  # delete existing help command
 trojsten = discord.Guild
 ready = False
+FIRST_CHECK = False
 load_dotenv()
 
 # Set global variables
-warnings = {}
 weird_messages = {}
-subscribers = {}
 # timeouts = {}
 seminars = []
-udaje = {}
+users = {}
+message_data = {}
 
 color_msg = None
 white = discord.Role
@@ -47,8 +50,9 @@ admin = discord.Role
 veduci = discord.Role
 
 # logging
-logscope = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
-logging.basicConfig(level=logscope)
+log_level = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
+log_format = '%(asctime)-15s %(name)s:[%(levelname)s] %(message)s'
+logging.basicConfig(level=log_level, format=log_format)
 command_log = logging.getLogger('commands')
 event_log = logging.getLogger('events')
 management_log = logging.getLogger('management')
@@ -56,9 +60,19 @@ web_log = logging.getLogger('web')
 loggers = [command_log, event_log, management_log, web_log]
 
 
+class User:
+    def __init__(self, warnings, subscriptions):
+        self.warnings = warnings
+        self.subscriptions = subscriptions
+
+    @staticmethod
+    def from_dict(source):
+        return User(source["warnings"], source["subscriptions"])
+
+
 @bot.event
 async def on_ready():
-    global trojsten, subscribers, seminars, udaje, ready
+    global trojsten, ready
     global white, orange, green, blue, colors
     global admin, veduci
     # global timeouts
@@ -68,8 +82,8 @@ async def on_ready():
     logging.info(f"Bot loaded as {bot.user.name}#{str(bot.user.discriminator)}")
 
     trojsten = bot.get_guild(cn.GUILD_ID)
-    if (trojsten is None):
-        logging.error("Guild not recognized! Change its ID in constants file")
+    if trojsten is None:
+        logging.critical("Guild not recognized! Change its ID in constants file")
         await bot.close()
         sys.exit(1)
 
@@ -82,52 +96,62 @@ async def on_ready():
     admin = trojsten.get_role(cn.ADMIN_ROLE)
     veduci = trojsten.get_role(cn.VEDUCI_ROLE)
 
-    # loading files
-    filehandler = open(cn.SUBSCRIBER_FILE, "wb+")
-    try:			# load last saved subscriber list
-        reader = open(cn.SUBSCRIBER_FILE, "rb")
-        subscribers = pickle.load(reader)
-        reader.close()
-    except Exception:
-        logging.warning("Loading subscriber file failed")
-    filehandler.close()
-    filehandler = open(cn.CONTENT_FILE, "wb+")
-    try:			# loading data
-        reader = open(cn.CONTENT_FILE, "rb")
-        udaje = pickle.load(reader)
-        reader.close()
-    except EOFError:  # if there is no file, create it
-        udaje = {
-            "rules": st.DEFAULT_RULES,
-            "faq": st.DEFAULT_FAQ_CONTENT
-        }
-        pickle.dump(udaje, filehandler)
-    filehandler = open(cn.MAIN_DATA_FILE, "wb+")
-    try:			 # loading
-        reader = open(cn.MAIN_DATA_FILE, "rb")
-        seminars = pickle.load(reader)
-        reader.close()
-    except EOFError:  # if there is no file, create them
-        seminars = [Seminar("kms"),
-                    Seminar("fks"),
-                    Seminar("ksp"),
-                    Seminar("ufo"),
-                    Seminar("prask")]
+    # get message message_data
+    msgs = {"rules", "faq"}
+    for msg in msgs:
+        if db.check_document(cn.FB_MSGS, msg):
+            result = db.get_document(cn.FB_MSGS, msg).to_dict()["list"]
+            message_data[msg] = collections.OrderedDict(sorted(result.items()))
+    loader = hp.load_default_data("faq" not in message_data.keys(), "rules" not in message_data.keys())
+    if len(loader) == 0:
+        logging.info("Loaded message database!")
+    else:
+        for msg in loader:
+            message_data[msg] = db.get_document(cn.FB_MSGS, msg).to_dict()["list"]
+        logging.info("Loaded and uploaded default message database!")
 
-        # Debug web gathering --> print first contestant in result table for seminar x
-        # print(seminars[1].result_table[0].print_contents())
-        pickle.dump(seminars, filehandler)
-    filehandler.close()
+    # add existing users to message_database, load saved
+    member_debug = {"l": 0, "c": 0}
+    for member in trojsten.members:
+        if member.id != bot.user.id:
+            if db.check_document(cn.FB_USERS, str(member.id)):
+                member_debug["l"] += 1
+                users[member.id] = User.from_dict(db.get_document(cn.FB_USERS, str(member.id)).to_dict())
+            else:
+                member_debug["c"] += 1
+                db.load(cn.FB_USERS, str(member.id), vars(User({"number": 0, "reasons": []}, [])))
+    logging.info(f"Loaded member database!\n - Loaded:{member_debug['l']} +:{member_debug['c']}")
+
+    # load saved info about seminars
+    sem_list = ["kms", "fks", "ksp", "ufo", "prask"]
+    for sem in sem_list:
+        if db.check_document(cn.FB_SEMINARS, sem):
+            seminars.append(Seminar.from_dict(db.get_document(cn.FB_SEMINARS, sem).to_dict()))
+        else:
+            seminar = Seminar(sem)
+            seminars.append(seminar)
+            db.load(cn.FB_SEMINARS, sem, seminar.to_dict())
+    logging.info("Loaded seminar database!")
 
     # setup classes
     for sem in seminars:
         sem.m_channel = bot.get_channel(sem.m_channel)
-        roles_and_emojis.append((trojsten.get_role(sem.role), bot.get_emoji(sem.emoji)))
+        sem.role = trojsten.get_role(sem.role)
+        sem.emoji = bot.get_emoji(sem.emoji)
+        if sem.active:
+            try:
+                sem.message = await hp.find_message(sem.m_channel, sem.msg_id)
+                bot.loop.create_task(updateloop(sem))
+            except hp.MessageNotFoundException:
+                management_log.warning(f"Main seminar mesage of {sem.name} was removed or not found!", exc_info=True)
+        roles_and_emojis.append((sem.role, sem.emoji))
 
     # MSGS #
     await welcome_message()
     await role_message()
     await color_message()
+
+    bot.loop.create_task(permaloop())
 
 
 # ###############################
@@ -135,26 +159,27 @@ async def on_ready():
 # ###############################
 
 
-# region Messages
+# region Messages    role_msg = await hp.find_message(general, _message)
 async def welcome_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _rules, _faq = "", ""
-    for i in range(len(udaje["rules"])):
-        _rules += f"{i+1}. {udaje['rules'][i]}\n"
-    for i in udaje["faq"]:
-        _faq += f"- *{i[0]}*\n{i[1]}\n"
+    keys = list(message_data['rules'].keys())
+    for i in range(len(message_data["rules"])):
+        _rules += f"{i+1}. {message_data['rules'][keys[i]]}\n"
+    for i in message_data["faq"].keys():
+        key = list(message_data['faq'][i].keys())[0]
+        _faq += f"> __*{key}*__\n{message_data['faq'][i][key]}\n"
     add = st.ADDITIONAL_CONTENT.format(bot.get_user(cn.ZAJO_ID).mention)
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     management_log.info("searching for welcome message ...")
-    message = await hp.find_message(general, st.WELCOME_HEADER)
-    if message is not None:
-        if (message.content != _message):
+    try:
+        message = await hp.find_message(general, st.WELCOME_HEADER)
+        if message.content != _message:
             await message.edit(content=_message)
             management_log.info("Changed")
-            pickle.dump(udaje, open(cn.CONTENT_FILE, "wb"))
         management_log.info("Welcome msg stat - OK")
-    else:
-        management_log.info("Generating new")
+    except hp.MessageNotFoundException:
+        management_log.info("Generating new", exc_info=True)
         await general.send(_message)
 
 
@@ -166,8 +191,8 @@ async def role_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _message = st.ROLE_MESSAGE
     management_log.info("Searching for role message ...")
-    role_msg = await hp.find_message(general, _message)
-    if role_msg is not None:
+    try:
+        role_msg = await hp.find_message(general, _message)
         management_log.info("React msg stat - OK")
         for react in role_msg.reactions:
             async for reactor in react.users():
@@ -176,12 +201,12 @@ async def role_message():
                         logging.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    else:
+    except hp.MessageNotFoundException:
         management_log.info("Generating new")
         msg = await general.send(_message)
         role_msg = msg
         for sem in seminars:
-            await msg.add_reaction(bot.get_emoji(sem.emoji))
+            await msg.add_reaction(emoji=sem.emoji)
 
 color_msg = None
 
@@ -191,8 +216,8 @@ async def color_message():
     general = trojsten.get_channel(cn.WELCOME_CHANNEL)
     _message = st.COLOR_MESSAGE
     management_log.info("Searching for color message ...")
-    color_msg = await hp.find_message(general, _message)
-    if color_msg is not None:
+    try:
+        color_msg = await hp.find_message(general, _message)
         management_log.info("Color msg stat - OK")
         for react in color_msg.reactions:
             async for reactor in react.users():
@@ -201,7 +226,7 @@ async def color_message():
                         event_log.info(f"Added role {role.name} to {reactor.name}")
                         await reactor.add_roles(role)
         management_log.info("React -> Role sync - OK")
-    else:
+    except hp.MessageNotFoundException:
         management_log.info("Generating new ...")
         msg = await general.send(_message)
         color_msg = msg
@@ -218,41 +243,43 @@ async def color_message():
 # region Events
 
 
-# used for uncached data :
+# used for uncached message_data :
 
 @bot.event
 async def on_raw_reaction_add(payload):
     user = trojsten.get_member(payload.user_id)
-    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id and not user.bot:
-        for role, emoji in roles_and_emojis:
-            if payload.emoji == emoji:
-                event_log.info(f"User {user.name} added reaction on {role.name}")
-                await user.add_roles(role)
-    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id and not user.bot:
-        if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
-            for role, emoji in colors:
-                if payload.emoji.name == emoji:
-                    event_log.info(f"User {user.name} added reaction on {role.name}")
+    if payload.channel_id == cn.WELCOME_CHANNEL and not user.bot:
+        if role_msg and role_msg.id == payload.message_id:
+            for role, emoji in roles_and_emojis:
+                if payload.emoji == emoji:
+                    event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
                     await user.add_roles(role)
+        elif color_msg and color_msg.id == payload.message_id:
+            if all(color_role not in user.roles for color_role in [x for x, _ in colors]):
+                for role, emoji in colors:
+                    if payload.emoji.name == emoji:
+                        event_log.info(f"User {user.name}#{user.id} added reaction on {role.name}")
+                        await user.add_roles(role)
 
 
 @bot.event
 async def on_raw_reaction_remove(payload):
     user = trojsten.get_member(payload.user_id)
-    if payload.channel_id == cn.WELCOME_CHANNEL and role_msg.id == payload.message_id:
-        for role, emoji in roles_and_emojis:
-            if payload.emoji == emoji and (role in user.roles):
-                event_log.info(f"User {user.name} removed reaction on {role.name}")
-                await user.remove_roles(role)
-    elif payload.channel_id == cn.WELCOME_CHANNEL and color_msg.id == payload.message_id:
-        for role, emoji in colors:
-            if payload.emoji.name == emoji:
-                if role in user.roles:
-                    event_log.info(f"User {user.name} removed reaction on {role.name}")
+    if payload.channel_id == cn.WELCOME_CHANNEL:
+        if role_msg and role_msg.id == payload.message_id:
+            for role, emoji in roles_and_emojis:
+                if payload.emoji == emoji and (role in user.roles):
+                    event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
                     await user.remove_roles(role)
+        elif color_msg and color_msg.id == payload.message_id:
+            for role, emoji in colors:
+                if payload.emoji.name == emoji:
+                    if role in user.roles:
+                        event_log.info(f"User {user.name}#{user.id} removed reaction on {role.name}")
+                        await user.remove_roles(role)
 
 
-# used for cached data  :
+# used for cached message_data  :
 
 # events moderation commands wip
 async def react_iter(look, iterator):
@@ -263,28 +290,29 @@ async def react_iter(look, iterator):
 
 
 async def add_warning(user, reason):
-    if user.name not in warnings:
-        warnings[user.id] = [1, reason]
+    if user.id not in users:
+        users[user.id] = User({"number": 1, "reasons": [reason]}, [])
     else:
-        warnings[user.id][0] += 1
-        warnings[user.id].append(reason)
-        event_log.info(f"{user.name} got warning because of {reason}. They have {str(warnings[user.id][0])} warnings.")
-    if warnings[user.id][0] >= cn.WARNINGS_TO_BAN:
+        users[user.id].warnings["number"] += 1
+        users[user.id].warnings["reasons"].append(reason)
+        event_log.info(f"{user.name} got warning because of {reason}."
+                       f"They have {str(users[user.id].warnings['number'])} warnings.")
+    if users[user.id].warnings["number"] >= cn.WARNINGS_TO_BAN:
         try:
-            await trojsten.ban(user, reason=", ".join(warnings[user.id][1:]), delete_message_days=0)
+            await trojsten.ban(user, reason=", ".join(users[user.id].warnings["reasons"]), delete_message_days=0)
             await user.dm_channel.send(st.BAN_MSG.format(cn.WARNINGS_TO_BAN))
         except Exception:
             await user.dm_channel.send(st.BAN_ERROR_U)
             await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
-            event_log.exception("Error while issuing ban")
+            event_log.exception("Error while issuing ban", exc_info=True)
     else:
-        await user.dm_channel.send(st.WARNING_MSG.format(str(warnings[user.id][0]), str(cn.WARNINGS_TO_BAN)))
+        await user.dm_channel.send(st.WARNING_MSG.format(str(users[user.id].warnings["number"]),
+                                                         str(cn.WARNINGS_TO_BAN)))
 
 
 @bot.event
-async def on_reaction_add(react, user):
+async def on_reaction_add(react, _):
     global trojsten
-    global warnings
     global weird_messages
 
     if react.message.channel == cn.TASKS_CHANNEL and react.emoji == cn.CHECKMARK_EMOJI and react.message.pinned:
@@ -304,7 +332,7 @@ async def on_reaction_add(react, user):
             hour = react.message.created_at.time().hour + 2
             minute = react.message.created_at.time().minute
             second = react.message.created_at.time().second
-            sent = datetime.time(hour=hour, minute=minute, second=second)
+            sent = datetime_whole.time(hour=hour, minute=minute, second=second)
             # react.message.created_at.time().hour += 2
             timestr = sent.isoformat(timespec="seconds")
             r_chan = react.message.channel.name
@@ -418,22 +446,28 @@ async def admin_rule(ctx, *args):
         await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
-        command_log.info(ctx.message.content)
+        data = message_data['rules']
+        keys = list(data.keys())
         if args[0] == "add" and len(args) == 2:
-            udaje["rules"].append(args[1])
+            data[str(int(keys[-1])+1)] = args[1]
+            db.load_to_map(cn.FB_MSGS, "rules", "list", {str(int(keys[-1])+1): args[1]})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
-                del udaje["rules"][int(args[1])-1]
+                del data[keys[int(args[1])-1]]
+                db.remove_from_map(cn.FB_MSGS, "rules", "list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise RuleNotFound
         elif args[0] == "edit" and len(args) == 3:
             try:
-                udaje["rules"][int(args[1])-1] = args[2]
+                data[keys[int(args[1])-1]] = args[2]
+                db.load_to_map(cn.FB_MSGS, "rules", "list", {keys[int(args[1])-1]: args[2]})
                 await complete()
             except Exception:
                 raise RuleNotFound
+        else:
+            raise commands.UserInputError()
     else:
         raise commands.UserInputError()
 
@@ -449,23 +483,31 @@ async def admin_faq(ctx, *args):
         await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
     if len(args) != 0:
+        data = message_data["faq"]
+        keys = list(data.keys())
         if args[0] == "add" and len(args) == 3:
-            udaje["faq"].append([args[1], args[2]])
+            data[str(int(keys[-1])+1)] = {args[1]: args[2]}
+            db.load_to_map(cn.FB_MSGS, "faq", "list", {str(int(keys[-1])+1): {args[1]: args[2]}})
             await complete()
         elif args[0] == "remove" and len(args) == 2:
             try:
-                del udaje["faq"][int(args[1])-1]
+                del data[keys[int(args[1])-1]]
+                db.remove_from_map(cn.FB_MSGS, "faq", "list", keys[int(args[1])-1])
                 await complete()
             except Exception:
                 raise FaqNotFound
         elif args[0] == "edit" and len(args) == 4:
             try:
-                question = args[2] if args[2] != "-" else udaje["faq"][int(args[1])-1][0]
-                answer = args[3] if args[3] != "-" else udaje["faq"][int(args[1])-1][1]
-                udaje["faq"][int(args[1])-1] = [question, answer]
+                key = list(data[keys[int(args[1])-1]].keys())[0]
+                question = args[2] if args[2] != "-" else key
+                answer = args[3] if args[3] != "-" else data[keys[int(args[1])-1]][key]
+                data[keys[int(args[1])-1]] = {question: answer}
+                db.update_map(cn.FB_MSGS, "faq", "list", keys[int(args[1])-1], {question: answer})
                 await complete()
             except Exception:
                 raise FaqNotFound
+        else:
+            raise commands.UserInputError
     else:
         raise commands.UserInputError
 
@@ -475,14 +517,14 @@ async def admin_faq(ctx, *args):
 @commands.dm_only()
 async def subscribe(ctx, arg):
     if arg == "list":
-        await ctx.channel.send(st.SUB_LIST.format('\n'.join(subscribers[str(ctx.author.id)])))
+        await ctx.channel.send(st.SUB_LIST.format('\n'.join(users[str(ctx.author.id)].subscriptions)))
     else:
-        subscribers[str(ctx.author.id)].append(arg)
+        users[str(ctx.author.id)].subscriptions.append(arg)
         await ctx.channel.send(st.SUB_RESPONSE.format(arg))
 
 
 @bot.command(name='lead')
-async def lead(ctx, seminar: typing.Optional[str]):
+async def lead(ctx, seminar: typing.Optional[str], ):
     for sem in seminars:
         if sem.name == seminar or sem.name == ctx.channel.name:
             msg = (f"👑 {sem.result_table[0].name}\n"
@@ -490,7 +532,7 @@ async def lead(ctx, seminar: typing.Optional[str]):
                    f"  3.   {sem.result_table[2].name}\n")
             await ctx.channel.send(msg)
             return
-        raise commands.UserInputError
+    raise commands.UserInputError
 
 
 @bot.event
@@ -544,8 +586,8 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    command_log.warning(f"Ignoring exception in command {ctx.command.name}:")
-    command_log.exception("Unhandled exception occured while running command!")
+    command_log.error(f"Unhandled exception occurred while running command {ctx.command.name}!", exc_info=True)
+    traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
 # Command debug events
@@ -555,31 +597,55 @@ async def on_command(ctx):
 
 
 @bot.event
-async def on_command_completion(ctx):
-    event_log.debug("Command executed succesfully.")
+async def on_command_completion(_):
+    event_log.debug("Command executed successfully.")
 # endregion
 
 
 # ####### MAIN LOOP ####### #
 async def permaloop():
-    # global last_update
-    last_update = 0
-    while True:
-        await asyncio.sleep(2)
-        if last_update + cn.MINIMAL_UPDATE_DELAY < time.time():
-            last_update = time.time()
-            for s in seminars:
-                res = s.get_info()
-                for change in res:
-                    if change == "new tasks":
-                        s.newroundmessage()
-                        s.voting("release")
-                    elif change == "new solutions":
-                        s.voting("ideal solutions")
-                    elif change == "new results":
-                        s.update_on_results()
-                    elif change == "end of turn":
-                        s.end_message()
+    event_log.info("Entering permaloop ...")
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        checkpoint = time.time()
+        for s in seminars:
+            for res in await s.make_request("ulohy"):
+                if res == "NT":
+                    management_log.info(f"Task relase ocured in -> {s.name}")
+                    await s.new_message()
+                    await s.announcement("release")
+                    # await s.voting() - wip
+                    db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+                elif res == "NS":  # wip
+                    management_log.info(f"Solution relase ocured in -> {s.name}")
+                    await s.announcement("end")
+                    # await s.voting("solutions") - wip
+                elif res == "END":
+                    management_log.info(f"Round of {s.name} has ended")
+                    await s.end_message()
+                    await s.announcement("end")
+                db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+            if await s.make_request("vysledky") == "NR":
+                management_log.info(f"Result table in {s.name} changed")
+                # await s.update_on_results()
+                db.load(cn.FB_SEMINARS, s.name, s.to_dict())
+        management_log.info(f"permaloop updated in {int((time.time()-checkpoint)*1000)}ms")
+        await asyncio.sleep(cn.MINIMAL_CHECKING_DELAY)
+    event_log.error("Exited infinite loop")
+
+
+async def updateloop(seminar):
+    event_log.info(f"Entering updateloop for seminar {seminar.name} ...")
+    await bot.wait_until_ready()
+    while not bot.is_closed():
+        try:
+            await seminar.update_message()
+        except Exception as e:
+            event_log.warning(f"{seminar.name} >>> Error occured while updating {e}", exc_info=True)
+        if not seminar.active:
+            event_log.info(f"Exiting updateloop for seminar {seminar.name} ... the round has ended.")
+            return
+        await asyncio.sleep(cn.UPDATE_DELAY)
 
 
 # #######################################
@@ -590,13 +656,18 @@ async def permaloop():
 
 
 class Task:
-    def __init__(self, name, link, points):
+    def __init__(self, name, link, category, points):
         self.name = name
         self.link = link
+        self.category = category
         self.points = points
 
+    @staticmethod
+    def from_dict(source):
+        return Task(source["name"], source["link"], source["category"], source["points"])
+
     def print_contents(self):
-        web_log.debug([self.name, self.link, self.points])
+        web_log.debug([self.name, self.link, self.category, self.points])
 
 
 class Person:
@@ -610,6 +681,11 @@ class Person:
         self.points = points
         self.points_sum = points_sum
 
+    @staticmethod
+    def from_dict(source):
+        return Person(source["stat"], source["name"], source["year"], source["school"],
+                      source["level"], source["points_bf"], source["points"], source["points_sum"])
+
     def print_contents(self):
         web_log.debug([self.stat, self.name, self.year, self.school,
                       self.level, self.points_bf, self.points, self.points_sum])
@@ -618,48 +694,115 @@ class Person:
 class Seminar:
 
     # Set variables
-    def __init__(self, name):
+    def __init__(self, name, autoloadData=True):
         self.name = name
         self.m_channel = cn.SEMINAR_CHANNELS[self.name]
         self.role = cn.SEMINAR_ROLES[self.name]
         self.url = cn.SEMINAR_URLS[self.name]
         self.emoji = cn.SEMINAR_EMOJIS[self.name]
-        self.active = False
-        self.year = 0
-        self.round = 0
-        self.part = 0
-        self.tasks = []
-        self.result_table = []
-        self.get_tasks()
-        self.get_results()
-        self.p_length = len(self.tasks)
-        if (self.result_table is not None):
-            for res in self.result_table:
-                res.print_contents()
+        self.message = None
+        if autoloadData:
+            self.active = False
+            self.info = {
+                "year": 0,
+                "round": 0,
+                "part": 0
+            }
+            self.tasks = []
+            self.tasks_id = None
+            self.pb_stat = None
+            self.result_table = []
+            self.p_length = len(self.tasks)
+            self.msg_id = None
+            self.r_datetime = datetime.now()
+
+    @staticmethod
+    def from_dict(source):
+        sem = Seminar(source['name'], False)
+        sem.active = source['active']
+        sem.info = source['info']
+        sem.tasks = [Task.from_dict(task) for task in source['tasks']]
+        sem.result_table = [Person.from_dict(person) for person in source['r_table']]
+        sem.msg_id = source['message']
+        sem.r_datetime = datetime.strptime(source['datetime'], "%m/%d/%Y %H:%M:%S")
+        return sem
+
+    def to_dict(self):
+        return {
+            "name": self.name,
+            "active": self.active,
+            "info": self.info,
+            "tasks": [vars(task) for task in self.tasks],
+            "r_table": [vars(person) for person in self.result_table],
+            "message": self.msg_id,
+            "datetime": self.r_datetime.strftime("%m/%d/%Y %H:%M:%S")
+        }
 
     def emoji_name(self):
         textA = "" if self.name == "fks" else ("K" if self.name == "kms" else "KS")
         textB = "" if self.name == "ksp" else ("S" if self.name == "kms" else "KS")
-        return f"{textA}<:{self.name}:{self.emoji}>{textB}"
+        return f"{textA}{self.emoji}{textB}"
 
     # # Announcments and voting messages
-    async def announcement(self, type):
-        a_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
-        if type == "release":
-            await a_channel.send(st.TASKS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
-        elif type == "end":
-            await a_channel(st.TASK_ROUND_END.format(trojsten.get_role(self.role)))
-        elif type == "ideal solutions":
-            await a_channel.send(st.SOLUTIONS_RELEASE.format(trojsten.get_role(self.role).mention, self.url))
+    async def announcement(self, atype):
+        a_channel = trojsten.get_channel(cn.ANNOUNCEMENTS_CHANNEL)
+        e = discord.Embed(title=f"Úlohy {self.name}",
+                          url=f"{self.url}ulohy/",
+                          colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]))
+        e.set_thumbnail(url=f"https://static.ksp.sk/images/{self.name}/{cn.SEMINAR_IMAGES[self.name]}")
+        if atype == "release":
+            await a_channel.send(st.TASKS_ANNOUNCEMENT.format(self.role.mention), embed=e)
+        elif atype == "end":
+            await a_channel(st.TASK_END_ANNOUNCEMENT.format(self.role))
+        elif atype == "solutions":
+            await a_channel.send(st.SOLUTIONS_RELEASE.format(self.role.mention))
 
     async def voting(self):
-        self.get_info()
-        if self.active:
-            vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
-            await vote_channel.send(self.emoji_name())
-            await vote_channel.send(st.VOTE_MESSAGE)
-            for n in range(self.p_length):
-                await vote_channel.send(str(n+1) + ". " + self.tasks[n].name)
+        vote_channel = trojsten.get_channel(cn.VOTING_CHANNEL)
+        content = ""
+        for n in range(self.p_length):
+            content += (f"{str(n+1)}. [{self.tasks[n].name}]({self.tasks[n].link})\n")
+        v_msg = await vote_channel.send(f"{self.emoji_name()}\n{st.VOTE_MESSAGE}\n{content}")
+        await bot.add_reaction(v_msg, emoji=":one:")
+
+    async def get_time(self):
+        remaining = (self.r_datetime - datetime.now()).total_seconds()
+        if remaining > 0:
+            days = remaining // 86400
+            remaining %= 86400
+            hours = remaining // 3600
+            remaining %= 3600
+            minutes = remaining // 60
+            return f"{int(days)}d {int(hours)}h {int(minutes)}m"
+        else:
+            await self.make_request("ulohy")
+            return st.ROUND_END
+
+    async def get_msg_embed(self):
+        e = discord.Embed(colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]),
+                          description=st.TASKS_RELEASE[2].format(self.url),
+                          timestamp=self.r_datetime)
+        e.set_author(name=st.TASKS_RELEASE[1].format(self.name), url=self.url,
+                     icon_url=f"https://cdn.discordapp.com/emojis/{cn.SEMINAR_EMOJIS[self.name]}.png?v=1")
+        e.set_footer(text=await self.get_time(), icon_url=cn.HOURGLASS)
+        return e
+
+    async def new_message(self):
+        self.message = await self.m_channel.send(st.TASKS_RELEASE[0].format(self.role.mention),
+                                                 embed=await self.get_msg_embed())
+        await self.message.pin()
+        self.msg_id = self.message.id
+        bot.loop.create_task(updateloop(self))
+
+    async def update_message(self):
+        await self.message.edit(embed=await self.get_msg_embed())
+
+    async def end_message(self):
+        await self.message.edit(
+            content=st.TASKS_ROUND_END.format(self.role.mention, self.url+self.tasks_id+"/")
+        )
+        self.msg_id = None
+        self.message = None
 
     # # user notify system ##
     def set_result_table(self, dict):
@@ -667,23 +810,23 @@ class Seminar:
         self.result_table = dict
 
     async def update_on_results(self):
-        global subscribers
-        for key in subscribers:
-            try:
-                if self.result_table.index(key) != self.last_results.index(key):
-                    await bot.get_user(subscribers[key]).dm_channel.send(st.SUB_CHANGE.format(key, self.url))
-            except Exception:
-                event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
+        for user in users:
+            for subscriber in user.subscriptions:
+                try:
+                    if self.result_table.index(subscriber) != self.last_results.index(subscriber):
+                        await bot.get_user(int(user)).dm_channel.send(st.SUB_CHANGE.format(subscriber, self.url))
+                except Exception:
+                    event_log.exception(f"Couldn't notify {bot.get_user(int(user)).name} about change in results table")
 
-    def get_person(self, clovek, row_type):
+    def get_person(self, person, row_type):
         pointers = []
         level = None
-        for i in range(len(clovek)):
+        for i in range(len(person)):
             rt = str(row_type[i].text).strip()
             if rt is None or rt == "":
                 rt = str(row_type[i][0].text).strip()
             if "#" in rt:
-                cLass = clovek[i].find(".//span").attrib["class"]
+                cLass = person[i].find(".//span").attrib["class"]
                 class_to_state = {
                     'glyphicon-asterisk': 'new',
                     'glyphicon-chevron-down': 'dropped',
@@ -695,27 +838,50 @@ class Seminar:
                     if icon in cLass:
                         state = class_to_state[icon]
             elif "Meno" in rt:
-                name = clovek[i].text.strip()
+                name = person[i].text.strip()
             elif "kola" in rt:
-                school = clovek[i][0].text.strip()
+                school = person[i][0].text.strip()
             elif "R" in rt:
-                year = clovek[i].text.strip()
+                year = person[i].text.strip()
             elif "Level" in rt or "K" in rt:
-                level = clovek[i][0].text.strip()
+                level = person[i][0].text.strip()
             elif "P" in rt:
-                points_before = clovek[i][0].text.strip()
+                points_before = person[i][0].text.strip()
             elif "∑" in rt:
-                points_sum = clovek[i][0].text.strip()
+                points_sum = person[i][0].text.strip()
             elif re.match(r"[1-9]", rt):
-                pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
+                pointers.append(None if person[i][0].text is None else person[i][0].text.strip())
         return Person(state, name, year, school, level, points_before, pointers, points_sum)
 
-    def get_results(self):
+    def get_time_data(self, tree):
+        pb = tree.find(".//div[@data-precision='DAY']")
+        self.tasks_id = pb.attrib["data-id"]
+        pb_stats = pb.find(".//div[@class='progress']")[0].attrib['class']
+        if "progress-bar-info" in pb_stats:
+            self.pb_stat = "info"
+        elif "progress-bar-warning" in pb_stats:
+            self.pb_stat = "warn"
+        elif "progress-bar-danger" in pb_stats:
+            self.pb_stat = "danger"
+        end_date = tree.find(".//em").text[12:]
+        self.r_datetime = datetime.strptime(hp.convert_month(end_date), " %d. %B %Y %H:%M")
+
+    async def make_request(self, to):
         try:
-            response = requests.get(self.url+"/vysledky/", allow_redirects=True)
-            sourceCode = response.content
+            async with aiohttp.ClientSession() as session:
+                async with session.get(f"{self.url}/{to}/") as r:
+                    output = None
+                    if to == "ulohy":
+                        output = await self.get_tasks(r)
+                    elif to == "vysledky":
+                        output = await self.get_results(r)
+                    await session.close()
+                    return output
         except Exception:
             web_log.exception(f"Connectivity error occured in {self.name}")
+
+    async def get_results(self, request):
+        sourceCode = await request.text()
         try:
             tree = lxml.etree.HTML(sourceCode)
         except Exception:
@@ -723,29 +889,25 @@ class Seminar:
         try:
             result_list = tree.find('.//table[@class="table table-hover table-condensed results-table"]')
         except Exception:
-            web_log.exception(f"Web is not compatible {self.name}")
+            web_log.exception(f"Web is not compatible - {self.name}")
         try:
-            output = []
+            output = None
             rows = result_list.findall(".//tr")
             row_type = rows[0].findall(".//th")
             results = []
             for per in rows[1:]:
                 clovek = per.findall(".//td")
                 results.append(self.get_person(clovek, row_type))
-            if (self.result_table != results):
-                output.append("new results")
+            if self.result_table != results:
+                output = "NR"
             self.set_result_table(results)
             web_log.info(f"Succesfully loaded results for seminar {self.name}")
             return output
         except Exception:
             web_log.exception(f"Pulling error occured in {self.name}")
 
-    def get_tasks(self):
-        try:
-            response = requests.get(self.url+"/ulohy/", allow_redirects=True)
-            sourceCode = response.content
-        except Exception:
-            web_log.exception(f"Connectivity error occured in {self.name}")
+    async def get_tasks(self, request):
+        sourceCode = await request.text()
         try:
             tree = lxml.etree.HTML(sourceCode)
         except Exception:
@@ -757,34 +919,38 @@ class Seminar:
         try:
             output = []
             if "task-list" in task_list.attrib["class"]:
-                self.active = True
+                if self.active is not True:
+                    self.active = True
+                    output.append("NT")
+                elif self.message is None:
+                    output.append("NT")
                 round_info = tree.find(".//small").text.replace("\n", "").replace(" ", "").split(",")
                 # set info
-                round = round_info[0].split(".")[0]
-                part = round_info[1].split(".")[0]
-                year = round_info[2].split(".")[0]
+                info = {
+                    "year": round_info[2].split(".")[0],
+                    "round": round_info[0].split(".")[0],
+                    "part": round_info[1].split(".")[0]
+                }
                 self.tasks = []
-                for node in task_list.findall("tr"):
+                task_rows = task_list.findall("tr")
+                for node in task_rows:
                     pointers = []
-                    for pointer in node[2].findall("span"):
-                        pointers.append(pointer.text.replace("\xa0", "").split(":")[1])
-                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"], pointers))
+                    for pointer in node[len(node.findall("td"))-1].findall("span"):
+                        line = pointer.text.replace("\xa0", "").split(":")
+                        pointers.append({line[0]: line[1]})
+                    self.tasks.append(Task(node[1][0].text, self.url+node[1][0].attrib["href"],
+                                           node[2][0].text if len(task_rows) > 2 else None, pointers))
                 self.p_length = len(self.tasks)
+                self.get_time_data(tree)
                 # check for changes
-                if (self.round != round or self.part != part or self.year != year) and len(self.tasks) > 0:
-                    output.append("new tasks")
-                self.round = round
-                self.part = part
-                self.year = year
-                # self.remaining = treeP.find(".//div[@class='progress-bar']").text
-                self.r_datetime = datetime.strptime(tree.find(".//em").text[12:], "%d. %B %Y %H:%M")
+                self.info = info
                 web_log.info(f"Succesfully loaded tasks for seminar {self.name}")
                 return output
             else:
-                if self.active is False:
-                    output.append("end of round")
-                self.active = False
-                self.remaining = "Round not active"
+                if self.active is True:
+                    output.append("END")
+                    self.active = False
+                    self.remaining = "Round not active"
                 web_log.info(f"Tasks for {self.name} are not available")
                 return output
         except Exception:
