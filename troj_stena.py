@@ -50,8 +50,9 @@ admin = discord.Role
 veduci = discord.Role
 
 # logging
-logscope = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
-logging.basicConfig(level=logscope)
+log_level = logging.INFO if not cn.DEBUG_MODE else logging.DEBUG
+log_format = '%(asctime)-15s %(name)s:[%(levelname)s] %(message)s'
+logging.basicConfig(level=log_level, format=log_format)
 command_log = logging.getLogger('commands')
 event_log = logging.getLogger('events')
 management_log = logging.getLogger('management')
@@ -142,7 +143,7 @@ async def on_ready():
                 sem.message = await hp.find_message(sem.m_channel, sem.msg_id)
                 bot.loop.create_task(updateloop(sem))
             except Exception:
-                management_log.warning(f"Main seminar mesage of {sem.name} was removed or not found!")
+                management_log.warning(f"Main seminar mesage of {sem.name} was removed or not found!", exc_info=True)
         roles_and_emojis.append((sem.role, sem.emoji))
 
     # MSGS #
@@ -178,7 +179,7 @@ async def welcome_message():
             management_log.info("Changed")
         management_log.info("Welcome msg stat - OK")
     except Exception:
-        management_log.info("Generating new")
+        management_log.info("Generating new", exc_info=True)
         await general.send(_message)
 
 
@@ -303,7 +304,7 @@ async def add_warning(user, reason):
         except Exception:
             await user.dm_channel.send(st.BAN_ERROR_U)
             await trojsten.get_channel(cn.ADMIN_CHANNEL).send(st.BAN_ERROR_A.format(user.name))
-            event_log.exception("Error while issuing ban")
+            event_log.exception("Error while issuing ban", exc_info=True)
     else:
         await user.dm_channel.send(st.WARNING_MSG.format(str(users[user.id].warnings["number"]),
                                                          str(cn.WARNINGS_TO_BAN)))
@@ -585,7 +586,7 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    command_log.error(f"Unhandled exception occurred while running command {ctx.command.name}!")
+    command_log.error(f"Unhandled exception occurred while running command {ctx.command.name}!", exc_info=True)
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
@@ -640,7 +641,7 @@ async def updateloop(seminar):
         try:
             await seminar.update_message()
         except Exception as e:
-            event_log.warning(f"{seminar.name} >>> Error occured while updating {e}")
+            event_log.warning(f"{seminar.name} >>> Error occured while updating {e}", exc_info=True)
         if not seminar.active:
             event_log.info(f"Exiting updateloop for seminar {seminar.name} ... the round has ended.")
             return
