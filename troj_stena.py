@@ -7,6 +7,7 @@ import time
 import typing
 import traceback
 import collections
+import datetime as datetime_whole
 from datetime import datetime
 
 import discord
@@ -59,13 +60,13 @@ loggers = [command_log, event_log, management_log, web_log]
 
 
 class User:
-    def __init__(self, warnings, subscribtions):
+    def __init__(self, warnings, subscriptions):
         self.warnings = warnings
-        self.subscribtions = subscribtions
+        self.subscriptions = subscriptions
 
     @staticmethod
     def from_dict(source):
-        return User(source["warnings"], source["subscribtions"])
+        return User(source["warnings"], source["subscriptions"])
 
 
 @bot.event
@@ -108,7 +109,7 @@ async def on_ready():
             message_data[msg] = db.get_document(cn.FB_MSGS, msg).to_dict()["list"]
         logging.info("Loaded and uploaded default message database!")
 
-    # add existin1g users to message_database, load saved
+    # add existing users to message_database, load saved
     member_debug = {"l": 0, "c": 0}
     for member in trojsten.members:
         if member.id != bot.user.id:
@@ -288,8 +289,8 @@ async def react_iter(look, iterator):
 
 
 async def add_warning(user, reason):
-    if user.name not in users:
-        users.append(User({"number": 1, "reasons": [reason]}, []))
+    if user.id not in users:
+        users[user.id] = User({"number": 1, "reasons": [reason]}, [])
     else:
         users[user.id].warnings["number"] += 1
         users[user.id].warnings["reasons"].append(reason)
@@ -309,7 +310,7 @@ async def add_warning(user, reason):
 
 
 @bot.event
-async def on_reaction_add(react, user):
+async def on_reaction_add(react, _):
     global trojsten
     global weird_messages
 
@@ -330,7 +331,7 @@ async def on_reaction_add(react, user):
             hour = react.message.created_at.time().hour + 2
             minute = react.message.created_at.time().minute
             second = react.message.created_at.time().second
-            sent = datetime.time(hour=hour, minute=minute, second=second)
+            sent = datetime_whole.time(hour=hour, minute=minute, second=second)
             # react.message.created_at.time().hour += 2
             timestr = sent.isoformat(timespec="seconds")
             r_chan = react.message.channel.name
@@ -515,9 +516,9 @@ async def admin_faq(ctx, *args):
 @commands.dm_only()
 async def subscribe(ctx, arg):
     if arg == "list":
-        await ctx.channel.send(st.SUB_LIST.format('\n'.join(users[str(ctx.author.id)].subscribtions)))
+        await ctx.channel.send(st.SUB_LIST.format('\n'.join(users[str(ctx.author.id)].subscriptions)))
     else:
-        users[str(ctx.author.id)].subscribtions.append(arg)
+        users[str(ctx.author.id)].subscriptions.append(arg)
         await ctx.channel.send(st.SUB_RESPONSE.format(arg))
 
 
@@ -584,7 +585,7 @@ async def on_command_error(ctx, error):
         await ctx.channel.send(st.FAQ_NOT_FOUND)
 
     # ignore all other exception types, but print them
-    command_log.error(f"Unhandled exception occured while running command {ctx.command.name}!")
+    command_log.error(f"Unhandled exception occurred while running command {ctx.command.name}!")
     traceback.print_exception(type(error), error, error.__traceback__, file=sys.stderr)
 
 
@@ -595,8 +596,8 @@ async def on_command(ctx):
 
 
 @bot.event
-async def on_command_completion(ctx):
-    event_log.debug("Command executed succesfully.")
+async def on_command_completion(_):
+    event_log.debug("Command executed successfully.")
 # endregion
 
 
@@ -810,22 +811,22 @@ class Seminar:
 
     async def update_on_results(self):
         for user in users:
-            for subscriber in user.subscribtions:
+            for subscriber in user.subscriptions:
                 try:
                     if self.result_table.index(subscriber) != self.last_results.index(subscriber):
                         await bot.get_user(int(user)).dm_channel.send(st.SUB_CHANGE.format(subscriber, self.url))
                 except Exception:
-                    event_log.exception(f"Couldn't notify {bot.get_user.name} about change in results table")
+                    event_log.exception(f"Couldn't notify {bot.get_user(int(user)).name} about change in results table")
 
-    def get_person(self, clovek, row_type):
+    def get_person(self, person, row_type):
         pointers = []
         level = None
-        for i in range(len(clovek)):
+        for i in range(len(person)):
             rt = str(row_type[i].text).strip()
             if rt is None or rt == "":
                 rt = str(row_type[i][0].text).strip()
             if "#" in rt:
-                cLass = clovek[i].find(".//span").attrib["class"]
+                cLass = person[i].find(".//span").attrib["class"]
                 class_to_state = {
                     'glyphicon-asterisk': 'new',
                     'glyphicon-chevron-down': 'dropped',
@@ -837,19 +838,19 @@ class Seminar:
                     if icon in cLass:
                         state = class_to_state[icon]
             elif "Meno" in rt:
-                name = clovek[i].text.strip()
+                name = person[i].text.strip()
             elif "kola" in rt:
-                school = clovek[i][0].text.strip()
+                school = person[i][0].text.strip()
             elif "R" in rt:
-                year = clovek[i].text.strip()
+                year = person[i].text.strip()
             elif "Level" in rt or "K" in rt:
-                level = clovek[i][0].text.strip()
+                level = person[i][0].text.strip()
             elif "P" in rt:
-                points_before = clovek[i][0].text.strip()
+                points_before = person[i][0].text.strip()
             elif "∑" in rt:
-                points_sum = clovek[i][0].text.strip()
+                points_sum = person[i][0].text.strip()
             elif re.match(r"[1-9]", rt):
-                pointers.append(None if clovek[i][0].text is None else clovek[i][0].text.strip())
+                pointers.append(None if person[i][0].text is None else person[i][0].text.strip())
         return Person(state, name, year, school, level, points_before, pointers, points_sum)
 
     def get_time_data(self, tree):

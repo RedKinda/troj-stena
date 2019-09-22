@@ -58,15 +58,15 @@ RULE_NOT_FOUND = "Pravidlo nebolo nájdené"
 FAQ_NOT_FOUND = "FAQ nebolo nájdené"
 HELP_HEADER = "Použitie príkazu {0}{1}:"
 COMMANDS_HELP = {
-    'rule': [('add "pravidlo"'),
-             ('remove číslo_pravidla'),
-             ('edit číslo_pravidla "nové pravidlo"')],
-    'faq': [('add "otázka" "odpoveď"'),
-            ('remove číslo_faq_v_poradí'),
-            ('edit číslo_faq_v_poradí "Nová otázka" "Nová odpoveď"'),
-            ('*pri použití edit "-" zachová pôvodnú otázku/odpoveď*')],
-    'lead': [('seminar'),
-             ('*seminar sa automaticky doplní ak použieš príkaz v kanáli semináru')]
+    'rule': ['add "pravidlo"',
+             'remove číslo_pravidla',
+             'edit číslo_pravidla "nové pravidlo"'],
+    'faq': ['add "otázka" "odpoveď"',
+            'remove číslo_faq_v_poradí',
+            'edit číslo_faq_v_poradí "Nová otázka" "Nová odpoveď"',
+            '*pri použití edit "-" zachová pôvodnú otázku/odpoveď*'],
+    'lead': ['seminar',
+             '*seminar sa automaticky doplní ak použieš príkaz v kanáli semináru']
 }
 CMD_NONEXISTENT = "Príkaz nenájdený"
 DISABLED_ERROR = "Príkaz ešte nieje použiteľný."
