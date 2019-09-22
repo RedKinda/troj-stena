@@ -173,7 +173,7 @@ async def welcome_message():
     _message = st.DEFAULT_WELCOME_MESSAGE.format(st.WELCOME_HEADER, _rules, _faq) + add
     management_log.info("searching for welcome message ...")
     try:
-        message = await hp.find_message(general, _message)
+        message = await hp.find_message(general, st.WELCOME_HEADER)
         if message.content != _message:
             await message.edit(content=_message)
             management_log.info("Changed")
