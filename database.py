@@ -5,6 +5,7 @@ from firebase_admin import firestore
 
 
 cred = credentials.ApplicationDefault()
+z = os.getenv('FIREBASE_PROJECT_ID')
 firebase_admin.initialize_app(cred, {
     'projectId': os.getenv('FIREBASE_PROJECT_ID'),
 })
