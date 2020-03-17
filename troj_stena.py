@@ -985,3 +985,4 @@ def create_user(id):
         users[str(id)] = User({"number": 0, "reasons": []}, [])
 
 bot.run(os.getenv('TOKEN'))
+ 
