@@ -50,6 +50,7 @@ BAN_ERROR_A = "Nebolo možné vydať ban pre {0}, kým táto chyba nebude vyrie�
 # command messages
 SUB_RESPONSE = "Super! Teraz budeš dostávať notifikácie o zmenách pre {0}"
 SUB_LIST = "Práve sleduješ tieto mená:\n {0}"
+SUB_ERROR_EXISTING = "Toto meno už sleduješ"
 SUB_HELP = "``````"
 TASK_SUBMITED = "{0} práve pridal úlohu na vyriešenie, označí sa {1}, keď bude vyriešená."
 TASK_COMPLETED = "Práve niekto vyriešil úlohu od {0} *({1})*. Gratulujeme!"

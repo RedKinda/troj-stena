@@ -140,9 +140,6 @@ async def on_ready():
 
     # setup classes
     for sem in seminars:
-        sem.m_channel = bot.get_channel(sem.m_channel)
-        sem.role = trojsten.get_role(sem.role)
-        sem.emoji = bot.get_emoji(sem.emoji)
         if sem.active:
             try:
                 sem.message = await hp.find_message(sem.m_channel, sem.msg_id)
@@ -296,7 +293,7 @@ async def react_iter(look, iterator):
 
 async def add_warning(user, reason):
     if user.id not in users:
-        users[user.id] = User({"number": 1, "reasons": [reason]}, [])
+        create_user(str(user.id))
     else:
         users[user.id].warnings["number"] += 1
         users[user.id].warnings["reasons"].append(reason)
@@ -518,14 +515,20 @@ async def admin_faq(ctx, *args):
 
 
 # wip cpmmand
-@bot.command(name='subscribe', aliases=['sub'], enabled=False)
+@bot.command(name='subscribe', aliases=['sub'], enabled=True)
 @commands.dm_only()
-async def subscribe(ctx, arg):
+async def subscribe(ctx):
+    global users
+    create_user(str(ctx.author.id))
+    arg = " ".join(ctx.message.content.split()[1:]) #parses text after command
     if arg == "list":
         await ctx.channel.send(st.SUB_LIST.format('\n'.join(users[str(ctx.author.id)].subscriptions)))
     else:
-        users[str(ctx.author.id)].subscriptions.append(arg)
-        await ctx.channel.send(st.SUB_RESPONSE.format(arg))
+        if arg not in users[str(ctx.author.id)].subscriptions:
+            users[str(ctx.author.id)].subscriptions.append(arg)
+            await ctx.channel.send(st.SUB_RESPONSE.format(arg))
+        else:
+            await ctx.channel.send(st.SUB_ERROR_EXISTING)
 
 
 @bot.command(name='lead')
@@ -598,7 +601,10 @@ async def on_command_error(ctx, error):
 # Command debug events
 @bot.event
 async def on_command(ctx):
-    event_log.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
+    if isinstance(ctx.channel, discord.TextChannel):
+        event_log.info(f"{ctx.message.author} used command {ctx.command.name} in {ctx.channel.name} channel.")
+    else:
+        event_log.info(f"{ctx.message.author} used command {ctx.command.name} in DM channel.")
 
 
 @bot.event
@@ -635,6 +641,13 @@ async def permaloop():
                 # await s.update_on_results()
                 db.load(cn.FB_SEMINARS, s.name, s.to_dict())
         management_log.info(f"permaloop updated in {int((time.time()-checkpoint)*1000)}ms")
+        #users update
+        global users
+        management_log.info("Creating and uploading {0} users".format(len(trojsten.members)-len(users)))
+        for mem in trojsten.members:
+            create_user(str(mem.id))
+        for userid in users.keys():
+            db.load(cn.FB_USERS, str(userid), vars(users[userid]))
         await asyncio.sleep(cn.MINIMAL_CHECKING_DELAY)
     event_log.error("Exited infinite loop")
 
@@ -701,10 +714,10 @@ class Seminar:
     # Set variables
     def __init__(self, name, autoloadData=True):
         self.name = name
-        self.m_channel = cn.SEMINAR_CHANNELS[self.name]
-        self.role = cn.SEMINAR_ROLES[self.name]
+        self.m_channel = bot.get_channel(cn.SEMINAR_CHANNELS[self.name])
+        self.role = trojsten.get_role(cn.SEMINAR_ROLES[self.name])
         self.url = cn.SEMINAR_URLS[self.name]
-        self.emoji = cn.SEMINAR_EMOJIS[self.name]
+        self.emoji = bot.get_emoji(cn.SEMINAR_EMOJIS[self.name])
         self.message = None
         if autoloadData:
             self.active = False
@@ -962,5 +975,13 @@ class Seminar:
             web_log.exception(f"Pulling error occured in {self.name}")
 # endregion
 
+# #######################################
+# ########## USEFUL FUNCTIONS ###########
+# #######################################
+
+def create_user(id):
+    global users
+    if str(id) not in users.keys():
+        users[str(id)] = User({"number": 0, "reasons": []}, [])
 
 bot.run(os.getenv('TOKEN'))

@@ -12,6 +12,7 @@ flake8 = "*"
 python-dotenv = "*"
 firebase-admin = "*"
 requests = "*"
+discord = "*"
 
 [requires]
 python_version = "3.7"
