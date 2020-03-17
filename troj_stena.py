@@ -17,8 +17,13 @@ import aiohttp
 from discord.ext import commands
 from discord.ext.commands import Bot
 from dotenv import load_dotenv
+load_dotenv()
 
-import constants as cn
+TESTVERSION = True
+if TESTVERSION:
+    import testconstants as cn
+else:
+    import constants as cn
 import strings as st
 import helpers as hp
 import database as db
@@ -29,7 +34,7 @@ bot.remove_command("help")  # delete existing help command
 trojsten = discord.Guild
 ready = False
 FIRST_CHECK = False
-load_dotenv()
+
 
 # Set global variables
 weird_messages = {}
