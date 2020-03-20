@@ -791,15 +791,14 @@ class Seminar:
             hours = remaining // 3600
             remaining %= 3600
             minutes = remaining // 60
-            return f"{int(days)}d {int(hours)}h {int(minutes)}m"
+            return f"{int(days)}d {int(hours)}h {int(minutes)}m  •  {self.r_datetime.strftime('%d/%m/%Y')}"
         else:
             await self.make_request("ulohy")
             return st.ROUND_END
 
     async def get_msg_embed(self):
         e = discord.Embed(colour=discord.Colour(cn.SEMINAR_COLOURS[self.name]),
-                          description=st.TASKS_RELEASE[2].format(self.url),
-                          timestamp=self.r_datetime)
+                          description=st.TASKS_RELEASE[2].format(self.url))
         e.set_author(name=st.TASKS_RELEASE[1].format(self.name), url=self.url,
                      icon_url=f"https://cdn.discordapp.com/emojis/{cn.SEMINAR_EMOJIS[self.name]}.png?v=1")
         e.set_footer(text=await self.get_time(), icon_url=cn.HOURGLASS)
@@ -841,24 +840,31 @@ class Seminar:
         level = None
         for i in range(len(person)):
             rt = str(row_type[i].text).strip()
+            state = "none"
+            points_before = 0
             if rt is None or rt == "":
                 rt = str(row_type[i][0].text).strip()
             if "#" in rt:
-                cLass = person[i].find(".//span").attrib["class"]
-                class_to_state = {
-                    'glyphicon-asterisk': 'new',
-                    'glyphicon-chevron-down': 'dropped',
-                    'glyphicon-chevron-up': 'advanced',
-                    'glyphicon-pushpin': 'pinned'
-                }
-                state = "none"
-                for icon in class_to_state:
-                    if icon in cLass:
-                        state = class_to_state[icon]
+                try:
+                    cLass = person[i].find(".//span").attrib["class"]
+                    class_to_state = {
+                        'glyphicon-asterisk': 'new',
+                        'glyphicon-chevron-down': 'dropped',
+                        'glyphicon-chevron-up': 'advanced',
+                        'glyphicon-pushpin': 'pinned'
+                    }
+                    for icon in class_to_state:
+                        if icon in cLass:
+                            state = class_to_state[icon]
+                except:
+                    web_log.debug("Excepted person's state")
             elif "Meno" in rt:
                 name = person[i].text.strip()
             elif "kola" in rt:
-                school = person[i][0].text.strip()
+                try:
+                    school = person[i][0].text.strip()
+                except:
+                    school = person[i].text.strip()
             elif "R" in rt:
                 year = person[i].text.strip()
             elif "Level" in rt or "K" in rt:
