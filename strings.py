@@ -2,8 +2,8 @@
 
 # welcome channel msgs
 WELCOME_HEADER = "**Vitaj na oficiálnom Discord serveri Online Školy Programovania Trojstenu!**"
-DEFAULT_WELCOME_MESSAGE = ("{0}\n\nToto je uvítací kanál pre nových účastníkov. "
-                          "\n\nCíť sa tu ako doma, a ak poznáš niekoho, kto by tu tiež mal byť, neváhaj ho pozvať: https://discord.gg/9vwtHhP\n\n"
+DEFAULT_WELCOME_MESSAGE = ("{0}\n\nToto je uvítací kanál pre nových účastníkov. \n\nCíť sa tu ako doma, a ak poznáš "
+                           "niekoho, kto by tu tiež mal byť, neváhaj ho pozvať: https://discord.gg/9vwtHhP\n\n"
                            "Pravidlá:\n{1}\n"
                            "Faq:\n{2}\n")
 
