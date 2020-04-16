@@ -92,7 +92,7 @@ async def on_ready():
             try:
                 seminar = core.Seminar.from_dict(db.get_document(cn.FB_SEMINARS, sem).to_dict())
             except Exception:
-                err = "Could not load existing seminars frmo database. Data might be missing or corrupted."
+                err = "Could not load existing seminars from database. Data might be missing or corrupted."
                 management_log.error(err)
                 seminar = core.Seminar(sem)
                 db.load(cn.FB_SEMINARS, sem, seminar.to_dict())

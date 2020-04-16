@@ -4,13 +4,13 @@ import logging
 import asyncio
 import re
 
-ids = [374]
+ids = [376]
 
 
 async def request(id):
     try:
         async with aiohttp.ClientSession() as session:
-            async with session.get(f"https://ksp.sk/vysledky/{id}") as r:
+            async with session.get(f"https://prask.ksp.sk/vysledky/{id}") as r:
                 output = await get_tasks(r, id)
                 return output
     except Exception:
@@ -48,12 +48,20 @@ async def get_tasks(r, id):
                 name = td[1].next
                 year = td[2].next
                 school = td[3].next.strip() if td[3].abbr is None else td[3].abbr.next.strip()
-                level = td[4].span.next.strip()
-                points_bf = 0 if state == "NaN" else td[5].span.next.strip()
+                # Pattern end #
+                o = 5
+                try:
+                    level = td[4].span.next.strip()
+                    if "?" in level:
+                        raise Exception
+                except Exception:
+                    level = -1
+                    o = 4
+                points_bf = 0 if state == "NaN" else td[o].span.next.strip()
                 points = {}
-                for i in range(len(td)-(6 if state == "NaN" else 7)):
-                    q = isinstance(td[(5 if state == "NaN" else 6)+i].span.next, str)  # check if not blank
-                    points[i+1] = td[(5 if state == "NaN" else 6)+i].span.next.strip() if q else ''
+                for i in range(len(td)-(o+1 if state == "NaN" else o+2)):
+                    q = isinstance(td[(o if state == "NaN" else o+1)+i].span.next, str)  # check if not blank
+                    points[i+1] = td[(o if state == "NaN" else o+1)+i].span.next.strip() if q else ''
                 points_sum = td[-1].span.next.strip()
                 # Refresh num holder
                 num_holder = num

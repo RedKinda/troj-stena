@@ -39,10 +39,10 @@ async def updateloop(rnd: Round):
     await globals.bot.wait_until_ready()
     while not globals.bot.is_closed():
         await asyncio.sleep(cn.UPDATE_DELAY)
-        # Garbage collector
-        if rnd.remaining.seconds <= 0:
-            del(rnd)
+        # Garbage collector (needs offset before deleting)
+        if rnd.remaining.seconds <= -cn.UPDATE_DELAY:
             event_log.info(f"Exiting updateloop for seminar {rnd.sem.name} ... the round has ended.")
+            del(rnd)
             return
         try:
             await rnd.check_round_message()
@@ -271,7 +271,7 @@ class Round:
 
     async def update_round_message(self):
         """Update round countdown message."""
-        event_log.info(f"Updating round message for {self.sem.name}#{self.id}")
+        event_log.debug(f"Updating round message for {self.sem.name}#{self.id}")
         await self.message.edit(embed=await self.get_round_message_embed())
 
     async def end_round_message(self):
@@ -482,12 +482,20 @@ class Seminar:
                     name = td[1].next
                     year = td[2].next
                     school = td[3].next.strip() if td[3].abbr is None else td[3].abbr.next.strip()
-                    level = td[4].span.next.strip()
-                    points_bf = 0 if state == "NaN" else td[5].span.next.strip()
+                    # Pattern end #
+                    o = 5
+                    try:
+                        level = td[4].span.next.strip()
+                        if "?" in level:
+                            raise Exception
+                    except Exception:
+                        level = -1
+                        o = 4
+                    points_bf = 0 if state == "NaN" else td[o].span.next.strip()
                     points = {}
-                    for i in range(len(td)-(6 if state == "NaN" else 7)):
-                        points[str(i+1)] = td[(5 if state == "NaN" else 6)+i].span.next.strip() if isinstance(
-                            td[(5 if state == "NaN" else 6)+i].span.next, str) else 'X'
+                    for i in range(len(td)-(o+1 if state == "NaN" else o+2)):
+                        points[str(i+1)] = td[(o if state == "NaN" else o+1)+i].span.next.strip() if isinstance(
+                            td[(o if state == "NaN" else o+1)+i].span.next, str) else 'X'
                     points_sum = td[-1].span.next.strip()
                     # Refresh num holder
                     num_holder = num
