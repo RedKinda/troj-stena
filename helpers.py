@@ -1,14 +1,16 @@
 import logging
+import discord
 import constants as cn
 import strings as st
 import database as db
+import globals
 
 
 class MessageNotFoundException(Exception):
     pass
 
 
-async def find_message(channel, query):
+async def find_message(channel: discord.channel.TextChannel, query):
 
     if isinstance(query, int):
         return await find_message_by_id(channel, query)
@@ -17,11 +19,12 @@ async def find_message(channel, query):
     raise ValueError("Invalid query type")
 
 
-async def find_message_by_id(channel, msg_id):
-    async for message in channel.history():
-        if message.author.bot and message.id == msg_id:
-            logging.info(f'Found bot message {msg_id}!')
-            return message
+async def find_message_by_id(channel: discord.channel.TextChannel, msg_id: int):
+    if msg_id is not None:
+        async for message in channel.history():
+            if message.author.bot and message.id == msg_id:
+                logging.info(f'Found bot message {msg_id}!')
+                return message
     raise MessageNotFoundException
 
 
@@ -48,3 +51,18 @@ def convert_month(mnt):
     for month in cn.MONTHS.keys():
         if month in mnt:
             return mnt.replace(month, cn.MONTHS[month])
+
+
+def create_user(id):
+    if str(id) not in globals.users.keys():
+        globals.users[str(id)] = User({"number": 0, "reasons": []}, [])
+
+
+class User:
+    def __init__(self, warnings, subscribtions):
+        self.warnings = warnings
+        self.subscribtions = subscribtions
+
+    @staticmethod
+    def from_dict(source):
+        return User(source["warnings"], source["subscribtions"])

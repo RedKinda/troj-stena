@@ -13,6 +13,7 @@ python-dotenv = "*"
 firebase-admin = "*"
 requests = "*"
 discord = "*"
+bs4 = "*"
 
 [requires]
 python_version = "3.7"
