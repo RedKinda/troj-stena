@@ -20,9 +20,9 @@ event_log = logging.getLogger('events')
 
 # Declare some decorators for restrictig commands
 # Check functions used by commands
-def in_channel(*args):
-    def channel_check(self, ctx):
-        channels = [self.server.get_channel(channel) for channel in args]
+def in_channel(self, *args):
+    def channel_check(ctx):
+        channels = [globals.server.get_channel(channel) for channel in args]
         if ctx.channel not in channels:
             raise self.WrongChannel()
         else:

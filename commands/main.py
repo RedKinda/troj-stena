@@ -8,6 +8,7 @@ import typing
 import globals
 import os
 import logging
+import messages
 
 event_log = logging.getLogger('events')
 
@@ -25,6 +26,8 @@ class Main(cmd.AbstractCommand):
         event_log.info(f"Loading cog {os.path.basename(__file__)}")
         super().__init__(os.path.basename(__file__))
 
+    # wip command
+    # Command used for creating puzzles and problems
     @commands.command(enabled=False)
     @cmd.in_channel(cn.TASKS_CHANNEL, cn.ADMIN_CHANNEL)
     async def new(self, ctx):
@@ -33,6 +36,8 @@ class Main(cmd.AbstractCommand):
         await tchannel.send(st.TASK_SUBMITED.format(ctx.author.name, cn.TASK_DONE_EMOJI))
         await ctx.pin()
 
+    # Disabled command
+    # Command used to purge all messages from channel
     @commands.command(name='purge', enabled=False)
     @commands.has_role(cn.ADMIN_ROLE)
     async def admin_purge(self, ctx, channel):
@@ -42,6 +47,7 @@ class Main(cmd.AbstractCommand):
         else:
             await ctx.channel.send(st.PURGE_EMPTY_CHANNEL)
 
+    # Command used to modify welcome message rules
     @commands.command(name='rule')
     @commands.guild_only()
     @cmd.in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
@@ -49,7 +55,7 @@ class Main(cmd.AbstractCommand):
     async def admin_rule(self, ctx, *args):
 
         async def complete():
-            # await welcome_message()
+            await messages.welcome_message()
             await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
         if len(args) != 0:
@@ -78,6 +84,7 @@ class Main(cmd.AbstractCommand):
         else:
             raise commands.UserInputError()
 
+    # Command used to modify welcome message faqs
     @commands.command(name='faq')
     @commands.guild_only()
     @cmd.in_channel(cn.DEV_CHANNEL, cn.ADMIN_CHANNEL, cn.TESTING_CHANNEL)
@@ -85,7 +92,7 @@ class Main(cmd.AbstractCommand):
     async def admin_faq(self, ctx, *args):
 
         async def complete():
-            # await welcome_message()
+            await messages.welcome_message()
             await ctx.message.add_reaction(emoji=cn.CHECKMARK_EMOJI)
 
         if len(args) != 0:
@@ -118,6 +125,7 @@ class Main(cmd.AbstractCommand):
             raise commands.UserInputError
 
     # wip cpmmand
+    # Command used to watch for changes in round results
     @commands.command(name='subscribe', aliases=['sub'], enabled=True)
     @commands.dm_only()
     async def subscribe(self, ctx):
@@ -132,13 +140,14 @@ class Main(cmd.AbstractCommand):
             else:
                 await ctx.channel.send(st.SUB_ERROR_EXISTING)
 
+    # Command used to display seminar leaderboard
     @commands.command(name='lead')
     async def lead(self, ctx, seminar: typing.Optional[str]):
         for sem in globals.seminars:
             if sem.name == seminar or sem.name == ctx.channel.name:
-                msg = (f"👑 {sem.result_table[0].name}\n"
-                       f"  2.   {sem.result_table[1].name}\n"
-                       f"  3.   {sem.result_table[2].name}\n")
+                msg = (f"👑 {sem.rounds[0].results[0].name}\n"
+                       f"  2.   {sem.rounds[0].results[1].name}\n"
+                       f"  3.   {sem.rounds[0].results[2].name}\n")
                 await ctx.channel.send(msg)
                 return
         raise commands.UserInputError
