@@ -32,8 +32,8 @@ COLOR_MESSAGE = "A farbu tvojho mena:"
 # event/system msgs
 TASKS_ANNOUNCEMENT = "**Kolo {} je tu!** Môžete začať riešiť:"
 TASKS_RELEASE = ["Vyšlo nové kolo {}", "Práve beží kolo {}.", "Úlohy nájdete [tu]({}/ulohy/)"]
-TASK_END_ANNOUNCEMENT = "Kolo {} skončilo. Gratulujeme úspešným riešitelom!"
-TASKS_ROUND_END = ["**Toto kolo {} už skončilo.**", "\\-- [Úlohy]({}/ulohy/)"]
+TASK_END_ANNOUNCEMENT = "**Kolo {} skončilo.** Gratulujeme úspešným riešitelom!"
+TASKS_ROUND_END = "**Toto kolo {} už skončilo.** \nVýsledky ({})"
 SOLUTIONS_RELEASE = ("Ahojte, vedúci práve pridali vzoráky k najnovšiemu kolu {0}!\n"
                      "Môžete ich nájsť tu:  {0}/ulohy")
 VOTE_MESSAGE = "Tu môžeš označiť aktuálne úlohy, ktoré sa ti páčili:"

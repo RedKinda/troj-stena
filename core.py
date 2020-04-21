@@ -38,12 +38,15 @@ async def updateloop(rnd: Round):
     event_log.info(f"Entering updateloop for seminar {rnd.sem.name} ...")
     await globals.bot.wait_until_ready()
     while not globals.bot.is_closed():
-        await asyncio.sleep(cn.UPDATE_DELAY)
-        # Garbage collector (needs offset before deleting)
-        if rnd.remaining.seconds <= -cn.UPDATE_DELAY:
+        # Garbage collector
+        if rnd.remaining.total_seconds() <= 0:
             event_log.info(f"Exiting updateloop for seminar {rnd.sem.name} ... the round has ended.")
-            del(rnd)
+            await rnd.end()
+            rnd.sem.rounds.pop(rnd.id)
+            db.load(cn.FB_SEMINARS, rnd.sem.name, rnd.sem.to_dict())
+            del(rnd)  # remove round
             return
+        await asyncio.sleep(cn.UPDATE_DELAY)
         try:
             await rnd.check_round_message()
         except Exception as e:
@@ -213,7 +216,7 @@ class Round:
             e.set_thumbnail(url=f"https://static.ksp.sk/images/{self.sem.name}/{cn.SEMINAR_IMAGES[self.sem.name]}")
             await a_channel.send(st.TASKS_ANNOUNCEMENT.format(self.sem.role.mention), embed=e)
         elif atype == "end":
-            await a_channel(st.TASK_END_ANNOUNCEMENT.format(self.sem.role))
+            await a_channel.send(st.TASK_END_ANNOUNCEMENT.format(self.sem.role.mention))
         elif atype == "solutions":
             await a_channel.send(st.SOLUTIONS_RELEASE.format(self.sem.role.mention))
 
@@ -228,11 +231,13 @@ class Round:
     # # Countdown message methods # #
 
     # region Helpers
+    def update_time(self):
+        self.remaining = self.endtime - datetime.now()
+
     async def get_time(self):
         """Get remaining time to round end or round ended message in form of formatted string"""
-        self.remaining = self.endtime - datetime.now()
         time_str = f"{self.remaining.days}d {self.remaining.seconds//3600}h {(self.remaining.seconds//60)%60}m"
-        return f"{time_str if self.remaining.seconds > 0 else st.ROUND_END}  •  {self.endtime.strftime('%d/%m/%Y')}"
+        return f"{time_str if self.remaining.total_seconds() > 0 else st.ROUND_END}  •  {self.endtime.strftime('%d/%m/%Y')}"
 
     async def get_round_message_embed(self):
         """Get round countdown embed"""
@@ -247,11 +252,14 @@ class Round:
     async def check_round_message(self):
         """Check if round message exists and asigns it, else creates new."""
         if self.message is None:
+            self.update_time()
             try:
                 event_log.info(f"Checking for round message for {self.sem.name}#{self.id}")
                 self.message = await hp.find_message_by_id(self.sem.m_channel, self.msg)
                 event_log.info(f"Round message found!")
                 await self.update_round_message()
+                if (self.remaining.total_seconds() <= 0):
+                    await self.end_round_message()
             except hp.MessageNotFoundException:
                 event_log.info(f"Round message couldn't be found, creating new!")
                 self.message = await self.new_round_message()
@@ -262,7 +270,10 @@ class Round:
                     event_log.error("Cannot pin message due to channel pin limit")
             globals.bot.loop.create_task(updateloop(self))
         else:
+            self.update_time()
             await self.update_round_message()
+            if (self.remaining.total_seconds() <= 0):
+                await self.end_round_message()
 
     async def new_round_message(self):
         """Message for round countdown message."""
@@ -276,8 +287,8 @@ class Round:
 
     async def end_round_message(self):
         """Mark as ended and reset round countdown message."""
-        await self.message.edit(
-            content=st.TASKS_ROUND_END.format(self.role.mention, self.url+self.tasks_id+"/")
+        await self.message.edit(content=st.TASKS_ROUND_END.format(
+            self.sem.role.mention, self.sem.url+"/vysledky/"+self.id.__str__()+"/")
         )
         await self.message.unpin()
         self.msg = None
@@ -308,9 +319,7 @@ class Round:
 
     async def end(self):
         management_log.info(f"Round of {self.sem.name}#{self.id} has ended")
-        await self.end_round_message()
         await self.announcement("end")
-        db.load(cn.FB_SEMINARS, self.sem.name, self.sem.to_dict())
 
 
 class Seminar:
@@ -445,7 +454,7 @@ class Seminar:
             for id_, round_ in self.rounds.items():
                 if id_ not in rounds_found:
                     await round_.end()
-                    web_log.warn(f"Cleared round data for {self.name}#{self.id_}")
+                    web_log.warn(f"Cleared round data for {self.name}#{id_}")
             return change
         except Exception:
             logging.exception(f"Structure or formatting is not compatible - {self.name}")
