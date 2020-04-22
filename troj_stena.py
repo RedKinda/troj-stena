@@ -75,8 +75,12 @@ async def on_ready():
     for member in globals.server.members:
         if member.id != globals.bot.user.id:
             if db.check_document(cn.FB_USERS, str(member.id)):
-                member_debug["l"] += 1
-                globals.users[member.id] = hp.User.from_dict(db.get_document(cn.FB_USERS, str(member.id)).to_dict())
+                try:
+                    globals.users[member.id] = hp.User.from_dict(db.get_document(cn.FB_USERS, str(member.id)).to_dict())
+                    member_debug["l"] += 1
+                except Exception:
+                    member_debug["c"] += 1
+                    db.load(cn.FB_USERS, str(member.id), vars(hp.User({"number": 0, "reasons": []}, [])))
             else:
                 member_debug["c"] += 1
                 db.load(cn.FB_USERS, str(member.id), vars(hp.User({"number": 0, "reasons": []}, [])))
