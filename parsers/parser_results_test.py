@@ -32,6 +32,7 @@ async def get_tasks(r, id):
         for table, nav in zip(results_table, nav_tabs):
             num_holder = 0
             print(f"-=[ Table {nav.a.next.strip()} ]=- ({id})")
+            head = table.find("tr")
             for tr in table.find_all("tr")[1:]:
                 td = tr.find_all("td")
                 if len(td) == 1:
@@ -53,6 +54,9 @@ async def get_tasks(r, id):
                 try:
                     level = td[4].span.next.strip()
                     if "?" in level:
+                        raise Exception
+                    ls = head.findAll('th')[4].next.next.text
+                    if "K." not in ls and "Level" not in ls:
                         raise Exception
                 except Exception:
                     level = -1

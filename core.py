@@ -475,6 +475,7 @@ class Seminar:
             for table, nav in zip(results_table, nav_tabs):
                 results = {}
                 num_holder = 0
+                head = table.find("tr")
                 for tr in table.find_all("tr")[1:]:
                     td = tr.find_all("td")
                     if len(td) == 1:
@@ -496,6 +497,9 @@ class Seminar:
                     try:
                         level = td[4].span.next.strip()
                         if "?" in level:
+                            raise Exception
+                        ls = head.findAll('th')[4].next.next.text
+                        if "K." not in ls and "Level" not in ls:
                             raise Exception
                     except Exception:
                         level = -1
